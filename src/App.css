@@ -1,0 +1,1322 @@
+/* ===================================================================
+   Material Design 3 — Token System
+   =================================================================== */
+:root {
+  /* Primary */
+  --md-primary: #6750A4;
+  --md-on-primary: #FFFFFF;
+  --md-primary-container: #EADDFF;
+  --md-on-primary-container: #21005D;
+
+  /* Secondary (Teal) */
+  --md-secondary: #00897B;
+  --md-on-secondary: #FFFFFF;
+  --md-secondary-container: #B2DFDB;
+  --md-on-secondary-container: #00251A;
+
+  /* Tertiary */
+  --md-tertiary: #7D5260;
+  --md-on-tertiary: #FFFFFF;
+  --md-tertiary-container: #FFD8E4;
+
+  /* Error */
+  --md-error: #B3261E;
+  --md-on-error: #FFFFFF;
+  --md-error-container: #F9DEDC;
+
+  /* Surface & Background */
+  --md-surface: #FFFBFE;
+  --md-surface-dim: #DED8E1;
+  --md-surface-bright: #FFFBFE;
+  --md-surface-container-lowest: #FFFFFF;
+  --md-surface-container-low: #F7F2FA;
+  --md-surface-container: #F3EDF7;
+  --md-surface-container-high: #ECE6F0;
+  --md-surface-container-highest: #E6E0E9;
+  --md-on-surface: #1C1B1F;
+  --md-on-surface-variant: #49454F;
+  --md-surface-variant: #E7E0EC;
+  --md-inverse-surface: #313033;
+  --md-inverse-on-surface: #F4EFF4;
+  --md-inverse-primary: #D0BCFF;
+  --md-background: #FFFBFE;
+
+  /* Outline */
+  --md-outline: #79747E;
+  --md-outline-variant: #CAC4D0;
+
+  /* Elevation shadows (MD3 style) */
+  --md-elevation-0: none;
+  --md-elevation-1: 0 1px 2px rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15);
+  --md-elevation-2: 0 1px 2px rgba(0,0,0,0.3), 0 2px 6px 2px rgba(0,0,0,0.15);
+  --md-elevation-3: 0 4px 8px 3px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.3);
+  --md-elevation-4: 0 6px 10px 4px rgba(0,0,0,0.15), 0 2px 3px rgba(0,0,0,0.3);
+  --md-elevation-5: 0 8px 12px 6px rgba(0,0,0,0.15), 0 4px 4px rgba(0,0,0,0.3);
+
+  /* Shape */
+  --md-shape-xs: 4px;
+  --md-shape-sm: 8px;
+  --md-shape-md: 12px;
+  --md-shape-lg: 16px;
+  --md-shape-xl: 28px;
+  --md-shape-full: 9999px;
+
+  /* Typography */
+  --md-font: 'Roboto', 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Motion */
+  --md-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --md-easing-decelerate: cubic-bezier(0, 0, 0, 1);
+  --md-duration-short1: 50ms;
+  --md-duration-short2: 100ms;
+  --md-duration-short3: 150ms;
+  --md-duration-short4: 200ms;
+  --md-duration-medium1: 250ms;
+  --md-duration-medium2: 300ms;
+  --md-duration-medium4: 400ms;
+  --md-duration-long2: 500ms;
+}
+
+/* ===================================================================
+   Font Fallback (reduce FOUT layout shift)
+   =================================================================== */
+@font-face {
+  font-family: 'Roboto-fallback';
+  src: local('Segoe UI');
+  size-adjust: 100.5%;
+  ascent-override: 92%;
+  descent-override: 22%;
+}
+
+/* ===================================================================
+   Base & Reset
+   =================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--md-background);
+  color: var(--md-on-surface);
+  font-family: var(--md-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* ===================================================================
+   App Root
+   =================================================================== */
+.md-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===================================================================
+   Top App Bar  (Elevation 2)
+   =================================================================== */
+.md-top-app-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--md-surface);
+  box-shadow: var(--md-elevation-2);
+  padding: 0 16px;
+  transition: box-shadow var(--md-duration-medium2) var(--md-easing-standard);
+}
+
+.md-top-app-bar__row {
+  display: flex;
+  align-items: center;
+  height: 64px;
+  gap: 12px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.md-top-app-bar__nav-icon {
+  color: var(--md-primary);
+  font-size: 28px;
+  user-select: none;
+}
+
+.md-top-app-bar__title {
+  flex: 1;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  letter-spacing: 0;
+  margin: 0;
+  line-height: 28px;
+}
+
+/* ===================================================================
+   Main Layout
+   =================================================================== */
+.md-main {
+  flex: 1;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  transition:
+    gap var(--md-duration-medium4) var(--md-easing-standard),
+    padding var(--md-duration-medium4) var(--md-easing-standard);
+}
+
+.md-main.has-content {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+/* ===================================================================
+   Hero subtitle (shown above the upload card when no images)
+   =================================================================== */
+.hero-subtitle {
+  text-align: center;
+  margin: 16px 0 8px;
+  color: var(--md-on-surface-variant);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+
+/* ===================================================================
+   Card (Paper Surface)
+   =================================================================== */
+.md-card {
+  background: var(--md-surface-container-lowest);
+  border-radius: var(--md-shape-md);
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow var(--md-duration-medium2) var(--md-easing-standard);
+}
+
+.md-elevation-1 { box-shadow: var(--md-elevation-1); }
+.md-elevation-2 { box-shadow: var(--md-elevation-2); }
+.md-elevation-3 { box-shadow: var(--md-elevation-3); }
+.md-elevation-4 { box-shadow: var(--md-elevation-4); }
+.md-elevation-5 { box-shadow: var(--md-elevation-5); }
+
+/* ===================================================================
+   Buttons — Filled, Tonal, Outlined, Text
+   =================================================================== */
+.md-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 24px;
+  border-radius: var(--md-shape-full);
+  font-family: var(--md-font);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  line-height: 20px;
+  border: none;
+  cursor: pointer;
+  user-select: none;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    box-shadow var(--md-duration-short4) var(--md-easing-standard),
+    background-color var(--md-duration-short4) var(--md-easing-standard);
+}
+
+.md-button .material-icons-round {
+  font-size: 18px;
+}
+
+/* — Ripple effect (CSS-only, center-origin) — */
+.md-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at center, currentColor 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0);
+  pointer-events: none;
+  z-index: 0;
+}
+.md-button:active::before {
+  animation: md-ripple 0.5s var(--md-easing-decelerate) forwards;
+}
+
+/* — State layer (hover / active) — */
+.md-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
+  pointer-events: none;
+}
+.md-button:hover::after { opacity: 0.08; }
+.md-button:active::after { opacity: 0.12; }
+.md-button:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+
+/* Filled */
+.md-button--filled {
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+  box-shadow: var(--md-elevation-0);
+}
+.md-button--filled:hover { box-shadow: var(--md-elevation-1); }
+
+/* Tonal (secondary container) */
+.md-button--tonal {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+}
+
+/* Outlined */
+.md-button--outlined {
+  background: transparent;
+  color: var(--md-primary);
+  border: 1px solid var(--md-outline);
+}
+
+/* Text */
+.md-button--text {
+  background: transparent;
+  color: var(--md-primary);
+  padding: 0 12px;
+}
+
+/* Disabled */
+.md-button:disabled {
+  background: rgba(28, 27, 31, 0.12);
+  color: rgba(28, 27, 31, 0.38);
+  box-shadow: none;
+  cursor: default;
+  pointer-events: none;
+}
+
+.md-button--outlined:disabled {
+  background: transparent;
+  border-color: rgba(28, 27, 31, 0.12);
+}
+
+/* ===================================================================
+   Icon Button
+   =================================================================== */
+.md-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--md-shape-full);
+  border: none;
+  background: transparent;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  text-decoration: none;
+  transition: color var(--md-duration-short4) var(--md-easing-standard);
+}
+
+.md-icon-button .material-icons-round { font-size: 24px; }
+.md-icon-button svg { width: 24px; height: 24px; fill: currentColor; }
+
+.md-icon-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
+  pointer-events: none;
+}
+.md-icon-button:hover::after { opacity: 0.08; }
+.md-icon-button:active::after { opacity: 0.12; }
+
+.md-icon-button:disabled {
+  color: rgba(28, 27, 31, 0.38);
+  cursor: default;
+  pointer-events: none;
+}
+
+.md-icon-button--filled {
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+
+/* ===================================================================
+   Upload Card
+   =================================================================== */
+.upload-card {
+  width: 100%;
+  max-width: 560px;
+  padding: 24px;
+  transition:
+    width var(--md-duration-medium4) var(--md-easing-emphasized),
+    max-width var(--md-duration-medium4) var(--md-easing-emphasized);
+}
+
+.upload-card.with-image {
+  width: 340px;
+  max-width: 340px;
+  flex-shrink: 0;
+}
+
+/* Card hover elevation */
+.upload-card:hover {
+  box-shadow: var(--md-elevation-2);
+}
+
+/* ===================================================================
+   Upload Zone (Drag‑Drop Surface)
+   =================================================================== */
+.upload-zone {
+  border: 2px dashed var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 24px 16px;
+  text-align: center;
+  transition:
+    border-color var(--md-duration-medium2) var(--md-easing-standard),
+    background var(--md-duration-medium2) var(--md-easing-standard),
+    transform var(--md-duration-medium2) var(--md-easing-standard);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  min-height: 180px;
+  justify-content: center;
+}
+
+/* — Drag active — */
+.upload-zone.dragging {
+  border-color: var(--md-secondary);
+  background: rgba(0, 137, 123, 0.05);
+  transform: scale(1.01);
+}
+
+.upload-zone.dragging .upload-actions,
+.upload-zone.dragging .upload-zone__empty {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.upload-zone.dragging::before {
+  content: '松开以上传图片';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-secondary);
+  z-index: 10;
+  animation: md-fade-in var(--md-duration-medium2) var(--md-easing-decelerate);
+}
+
+/* — Empty state illustration — */
+.upload-zone__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: opacity var(--md-duration-medium2) var(--md-easing-standard);
+}
+
+.upload-zone__icon {
+  font-size: 48px;
+  color: var(--md-on-surface-variant);
+  opacity: 0.6;
+}
+
+/* Enhanced empty state — icon in tinted circle with float animation */
+.upload-zone__icon-wrapper {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--md-primary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: md-gentle-float 3s ease-in-out infinite;
+}
+
+.upload-zone__icon-wrapper .material-icons-round {
+  font-size: 40px;
+  color: var(--md-on-primary-container);
+}
+
+.upload-zone__title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  margin: 0;
+}
+
+.upload-zone__subtitle {
+  font-size: 14px;
+  color: var(--md-on-surface-variant);
+  margin: 0;
+}
+
+/* — Button row — */
+.upload-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  transition: opacity var(--md-duration-medium2) var(--md-easing-standard);
+}
+
+/* ===================================================================
+   URL Form & Text Field (outlined)
+   =================================================================== */
+.url-form {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  animation: md-fade-in var(--md-duration-medium2) var(--md-easing-decelerate);
+}
+
+.md-text-field {
+  flex: 1;
+  position: relative;
+}
+
+.md-text-field__input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  font-family: var(--md-font);
+  font-size: 16px;
+  color: var(--md-on-surface);
+  background: transparent;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
+  outline: none;
+  caret-color: var(--md-primary);
+  transition:
+    border-color var(--md-duration-short4) var(--md-easing-standard),
+    box-shadow var(--md-duration-short4) var(--md-easing-standard);
+}
+
+.md-text-field__input:hover {
+  border-color: var(--md-on-surface);
+}
+
+.md-text-field__input:focus {
+  border-color: var(--md-primary);
+  border-width: 2px;
+  padding: 0 15px; /* compensate for thicker border */
+  box-shadow: none;
+}
+
+.md-text-field__label {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: var(--md-on-surface-variant);
+  background: var(--md-surface-container-lowest);
+  padding: 0 4px;
+  pointer-events: none;
+  transition:
+    top var(--md-duration-short4) var(--md-easing-standard),
+    transform var(--md-duration-short4) var(--md-easing-standard),
+    font-size var(--md-duration-short4) var(--md-easing-standard),
+    color var(--md-duration-short4) var(--md-easing-standard);
+}
+
+.md-text-field__input:focus + .md-text-field__label,
+.md-text-field__input:not(:placeholder-shown) + .md-text-field__label {
+  top: 0;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--md-primary);
+}
+
+/* Textarea variant */
+.md-text-field--textarea {
+  flex: unset;
+}
+
+.md-text-field__textarea {
+  height: auto;
+  min-height: 96px;
+  padding: 12px 16px;
+  resize: vertical;
+  line-height: 1.5;
+  font-family: var(--md-font);
+}
+
+.md-text-field__textarea:focus {
+  padding: 11px 15px;
+}
+
+.md-text-field--textarea .md-text-field__label {
+  top: 14px;
+  transform: none;
+}
+
+.md-text-field__textarea:focus + .md-text-field__label,
+.md-text-field__textarea:not(:placeholder-shown) + .md-text-field__label {
+  top: 0;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--md-primary);
+}
+
+/* ===================================================================
+   Image Preview
+   =================================================================== */
+.image-preview-wrapper {
+  margin-top: 16px;
+}
+
+.image-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.image-counter {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  min-width: 56px;
+  text-align: center;
+  letter-spacing: 0.25px;
+}
+
+.image-preview {
+  position: relative;
+  border-radius: var(--md-shape-md);
+  overflow: hidden;
+  background: var(--md-surface-container);
+  box-shadow: var(--md-elevation-1);
+  cursor: pointer;
+  transition: box-shadow var(--md-duration-medium2) var(--md-easing-standard);
+  aspect-ratio: 4 / 3;
+}
+
+.image-preview:hover {
+  box-shadow: var(--md-elevation-2);
+}
+
+.image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* — Loading overlay with circular progress — */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 251, 254, 0.7);
+  z-index: 2;
+  border-radius: inherit;
+}
+
+.md-circular-progress {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--md-primary-container);
+  border-top-color: var(--md-primary);
+  border-radius: 50%;
+  animation: md-spin 0.8s linear infinite;
+  will-change: transform;
+}
+
+/* ===================================================================
+   Result Card
+   =================================================================== */
+.result-card {
+  flex: 1;
+  min-width: 0;
+  max-height: calc(100vh - 120px);
+  position: sticky;
+  top: 88px;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  animation: md-fade-in var(--md-duration-medium4) var(--md-easing-decelerate) forwards;
+}
+
+.result-card:hover {
+  box-shadow: var(--md-elevation-2);
+}
+.md-linear-progress {
+  height: 4px;
+  background: var(--md-primary-container);
+  overflow: hidden;
+  border-radius: var(--md-shape-md) var(--md-shape-md) 0 0;
+  flex-shrink: 0;
+}
+
+.md-linear-progress__bar {
+  height: 100%;
+  background: var(--md-primary);
+  animation: md-progress-indeterminate 2s var(--md-easing-standard) infinite;
+}
+
+.result-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  scroll-behavior: smooth;
+  min-height: 300px;
+}
+
+/* — Loading state — */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 0;
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.loading-state__icon {
+  font-size: 36px;
+  color: var(--md-primary);
+  animation: md-spin 1.5s var(--md-easing-standard) infinite;
+}
+
+/* ===================================================================
+   Result Text
+   =================================================================== */
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+
+.result-header__info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  letter-spacing: 0.1px;
+}
+
+.result-header__info .material-icons-round {
+  font-size: 20px;
+  color: var(--md-primary);
+}
+
+.result-body {
+  line-height: 1.7;
+  color: var(--md-on-surface);
+  font-size: 15px;
+}
+
+.streaming-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* — Animated lines (only during streaming to avoid replay on image switch) — */
+.text-line {
+  margin: 4px 0;
+  min-height: 1.4em;
+}
+
+.streaming-text.is-streaming .text-line {
+  opacity: 0;
+  animation: md-line-reveal 0.4s var(--md-easing-decelerate) forwards;
+  animation-delay: min(calc(var(--line-index) * 30ms), 1s);
+}
+
+/* — LaTeX — */
+.latex-inline {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+.latex-block-wrapper {
+  display: block;
+  margin: 12px 0;
+  overflow-x: auto;
+  max-width: 100%;
+  text-align: center;
+}
+
+.latex-block-wrapper .katex-display {
+  margin: 0;
+  padding: 8px 0;
+}
+
+.katex {
+  font-size: 1.1em;
+  line-height: 1.2;
+}
+
+.katex-display > .katex {
+  display: flex !important;
+  justify-content: center;
+  width: 100%;
+}
+
+.katex-html {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+/* ===================================================================
+   Dialog (Modal)
+   =================================================================== */
+.md-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: md-fade-in var(--md-duration-medium2) var(--md-easing-decelerate);
+}
+
+.md-dialog {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  background: var(--md-surface-container-highest);
+  border-radius: var(--md-shape-xl);
+  padding: 16px;
+  box-shadow: var(--md-elevation-5);
+  animation: md-dialog-enter var(--md-duration-medium4) var(--md-easing-emphasized);
+}
+
+.md-dialog img {
+  max-width: 100%;
+  max-height: calc(90vh - 32px);
+  object-fit: contain;
+  border-radius: var(--md-shape-md);
+  display: block;
+}
+
+.md-dialog__close {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  box-shadow: var(--md-elevation-2);
+  z-index: 1;
+}
+
+.md-dialog__close:hover {
+  box-shadow: var(--md-elevation-3);
+}
+
+/* ===================================================================
+   Settings Dialog
+   =================================================================== */
+.settings-dialog {
+  background: var(--md-surface-container-high);
+  border-radius: var(--md-shape-xl);
+  padding: 24px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: md-dialog-enter var(--md-duration-medium4) var(--md-easing-emphasized);
+}
+
+.settings-dialog__title {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  margin: 0 0 4px;
+  line-height: 32px;
+}
+
+.settings-dialog__desc {
+  font-size: 13px;
+  color: var(--md-on-surface-variant);
+  margin: 0 0 24px;
+  line-height: 18px;
+}
+
+.settings-dialog__form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.settings-dialog__form .md-text-field {
+  flex: unset;
+}
+
+.settings-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Helper / validation text */
+.settings-dialog__helper {
+  font-size: 12px;
+  line-height: 16px;
+  margin: -12px 0 0 16px;
+  color: var(--md-on-surface-variant);
+}
+
+.settings-dialog__helper--error {
+  color: var(--md-error);
+}
+
+/* Error state on text field */
+.md-text-field__input--error {
+  border-color: var(--md-error);
+}
+
+.md-text-field__input--error:focus {
+  border-color: var(--md-error);
+}
+
+.md-text-field__input--error + .md-text-field__label,
+.md-text-field__input--error:focus + .md-text-field__label {
+  color: var(--md-error);
+}
+
+/* Text field with trailing icon (password toggle) */
+.md-text-field--with-trailing {
+  position: relative;
+}
+
+.md-text-field--with-trailing .md-text-field__input {
+  padding-right: 48px;
+}
+
+.md-text-field--with-trailing .md-text-field__input:focus {
+  padding-right: 47px;
+}
+
+.md-text-field__trailing {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+}
+
+.md-text-field__trailing .material-icons-round {
+  font-size: 20px;
+}
+
+/* ===================================================================
+   Icon Button — Badge (unconfigured dot)
+   =================================================================== */
+.md-icon-button--badge {
+  position: relative;
+}
+
+.md-icon-button--badge::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  background: var(--md-error);
+  border-radius: 50%;
+  z-index: 1;
+}
+
+/* ===================================================================
+   Snackbar
+   =================================================================== */
+.md-snackbar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  height: 48px;
+  background: var(--md-inverse-surface);
+  color: var(--md-inverse-on-surface);
+  border-radius: var(--md-shape-xs);
+  box-shadow: var(--md-elevation-3);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.25px;
+  z-index: 2000;
+  animation: md-snackbar-enter var(--md-duration-medium2) var(--md-easing-decelerate);
+}
+
+.md-snackbar .material-icons-round {
+  font-size: 20px;
+  color: var(--md-inverse-primary);
+}
+
+/* Error variant — red icon */
+.md-snackbar--error .material-icons-round {
+  color: var(--md-error);
+}
+
+.md-snackbar__text {
+  flex: 1;
+}
+
+/* Snackbar dismiss button */
+.md-snackbar__dismiss {
+  color: var(--md-inverse-on-surface);
+  width: 32px;
+  height: 32px;
+  margin-left: 4px;
+}
+.md-snackbar__dismiss .material-icons-round {
+  font-size: 18px;
+  color: var(--md-inverse-on-surface);
+}
+
+/* ===================================================================
+   Scrollbar (subtle, Material-like)
+   =================================================================== */
+.result-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.result-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.result-container::-webkit-scrollbar-thumb {
+  background: var(--md-outline-variant);
+  border-radius: var(--md-shape-full);
+  border: 2px solid var(--md-surface-container-lowest);
+}
+
+.result-container::-webkit-scrollbar-thumb:hover {
+  background: var(--md-outline);
+}
+
+/* ===================================================================
+   GPU Compositing Hints
+   =================================================================== */
+.md-dialog,
+.settings-dialog,
+.md-snackbar,
+.md-scrim {
+  will-change: transform, opacity;
+}
+
+.md-linear-progress__bar {
+  will-change: transform;
+}
+
+/* ===================================================================
+   Animations
+   =================================================================== */
+@keyframes md-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes md-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes md-progress-indeterminate {
+  0%   { transform: translateX(-100%); width: 40%; }
+  50%  { transform: translateX(60%);   width: 30%; }
+  100% { transform: translateX(200%);  width: 10%; }
+}
+
+@keyframes md-line-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes md-dialog-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes md-snackbar-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes md-ripple {
+  0%   { transform: scale(0); opacity: 0.16; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes md-gentle-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+/* ===================================================================
+   Responsive — MD3 3-stage layout (Compact / Medium / Expanded)
+   =================================================================== */
+
+/* --- Medium (600–839px): tablet portrait --- */
+@media (min-width: 600px) and (max-width: 839px) {
+  .md-top-app-bar__row { height: 56px; }
+  .md-top-app-bar__title { font-size: 20px; }
+
+  .md-main { padding: 20px 16px 40px; }
+
+  .upload-card.with-image {
+    width: 280px;
+    max-width: 280px;
+  }
+
+  .result-container { padding: 16px 20px; }
+  .settings-dialog { width: calc(100vw - 48px); }
+}
+
+/* --- Compact (<600px): phone --- */
+@media (max-width: 599px) {
+  .md-top-app-bar__row { height: 56px; }
+  .md-top-app-bar__title { font-size: 18px; }
+
+  .md-main {
+    padding: 16px 12px 32px;
+  }
+
+  .md-main.has-content {
+    flex-direction: column;
+  }
+
+  .upload-card,
+  .upload-card.with-image {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .result-card {
+    max-height: 50vh;
+    position: relative;
+    top: 0;
+  }
+
+  .result-container {
+    min-height: 200px;
+    padding: 16px;
+  }
+
+  .result-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .result-header .md-button {
+    width: 100%;
+  }
+
+  .upload-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .url-form {
+    flex-direction: column;
+  }
+
+  .md-dialog {
+    max-width: 95vw;
+    padding: 8px;
+    border-radius: var(--md-shape-lg);
+  }
+
+  .settings-dialog {
+    width: calc(100vw - 32px);
+    padding: 20px 16px;
+  }
+
+  .md-snackbar {
+    left: 16px;
+    right: 16px;
+    transform: none;
+    width: auto;
+  }
+
+  @keyframes md-snackbar-enter {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .katex-display { font-size: 0.9em; }
+  .latex-block-wrapper { max-width: 100%; overflow-x: auto; }
+}
+
+/* --- Touch targets: ensure 48dp minimum on touch devices --- */
+@media (pointer: coarse) {
+  .md-icon-button {
+    width: 48px;
+    height: 48px;
+  }
+
+  .image-navigation { gap: 4px; }
+}
+
+/* ===================================================================
+   Hidden file input
+   =================================================================== */
+#file-input {
+  display: none;
+}
+
+/* ===================================================================
+   Dark Theme  (prefers-color-scheme: dark)
+   MD3 dark palette — auto-adapts via CSS custom-property override
+   =================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Primary */
+    --md-primary: #D0BCFF;
+    --md-on-primary: #381E72;
+    --md-primary-container: #4F378B;
+    --md-on-primary-container: #EADDFF;
+
+    /* Secondary (Teal) */
+    --md-secondary: #80CBC4;
+    --md-on-secondary: #003731;
+    --md-secondary-container: #005048;
+    --md-on-secondary-container: #B2DFDB;
+
+    /* Tertiary */
+    --md-tertiary: #EFB8C8;
+    --md-on-tertiary: #492532;
+    --md-tertiary-container: #633B48;
+
+    /* Error */
+    --md-error: #F2B8B5;
+    --md-on-error: #601410;
+    --md-error-container: #8C1D18;
+
+    /* Surface & Background */
+    --md-surface: #1C1B1F;
+    --md-surface-dim: #141218;
+    --md-surface-bright: #3B383E;
+    --md-surface-container-lowest: #0F0D13;
+    --md-surface-container-low: #1D1B20;
+    --md-surface-container: #211F26;
+    --md-surface-container-high: #2B2930;
+    --md-surface-container-highest: #36343B;
+    --md-on-surface: #E6E1E5;
+    --md-on-surface-variant: #CAC4D0;
+    --md-surface-variant: #49454F;
+    --md-inverse-surface: #E6E1E5;
+    --md-inverse-on-surface: #313033;
+    --md-inverse-primary: #6750A4;
+    --md-background: #1C1B1F;
+
+    /* Outline */
+    --md-outline: #938F99;
+    --md-outline-variant: #49454F;
+
+    /* Elevation — subtler shadows for dark surfaces */
+    --md-elevation-1: 0 1px 3px 1px rgba(0,0,0,0.30), 0 1px 2px rgba(0,0,0,0.50);
+    --md-elevation-2: 0 2px 6px 2px rgba(0,0,0,0.30), 0 1px 2px rgba(0,0,0,0.50);
+    --md-elevation-3: 0 4px 8px 3px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.50);
+    --md-elevation-4: 0 6px 10px 4px rgba(0,0,0,0.30), 0 2px 3px rgba(0,0,0,0.50);
+    --md-elevation-5: 0 8px 12px 6px rgba(0,0,0,0.30), 0 4px 4px rgba(0,0,0,0.50);
+  }
+
+  /* Dark mode scrim */
+  .md-scrim { background: rgba(0, 0, 0, 0.75); }
+
+  /* Loading overlay needs darker backdrop */
+  .loading-overlay { background: rgba(28, 27, 31, 0.7); }
+
+  /* Button disabled states for dark */
+  .md-button:disabled {
+    background: rgba(230, 225, 229, 0.12);
+    color: rgba(230, 225, 229, 0.38);
+  }
+  .md-button--outlined:disabled {
+    border-color: rgba(230, 225, 229, 0.12);
+  }
+  .md-icon-button:disabled {
+    color: rgba(230, 225, 229, 0.38);
+  }
+
+  /* Text field label background adapts to dark surface */
+  .md-text-field__label {
+    background: var(--md-surface-container-lowest);
+  }
+  .settings-dialog .md-text-field__label {
+    background: var(--md-surface-container-high);
+  }
+
+  /* Scrollbar dark variant */
+  .result-container::-webkit-scrollbar-thumb {
+    background: var(--md-outline-variant);
+    border-color: var(--md-surface-container-lowest);
+  }
+  .result-container::-webkit-scrollbar-thumb:hover {
+    background: var(--md-outline);
+  }
+}

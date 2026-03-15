@@ -1,0 +1,8 @@
+{
+  "short_name": "LLM OCR",
+  "name": "LLM OCR - 智能文字识别",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#6750A4",
+  "background_color": "#FFFBFE"
+}
