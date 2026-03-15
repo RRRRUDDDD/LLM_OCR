@@ -89,7 +89,3 @@ yarn preview
 # 或使用 Vercel CLI
 vercel --prod
 ```
-
-## License
-
-MIT
