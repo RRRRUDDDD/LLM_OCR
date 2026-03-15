@@ -1,0 +1,95 @@
+# LLM OCR
+
+基于多模态大语言模型的智能文字识别工具。通过 Vision API 从图片中提取文字，支持流式输出、LaTeX 公式渲染、批量处理。
+
+## 功能特性
+
+- **LLM 驱动识别** — 使用多模态大模型进行文字识别，非传统 OCR 引擎
+- **流式实时输出** — 通过 SSE 流式返回识别结果，逐字显示
+- **多图批量处理** — 支持同时上传多张图片，滑动窗口并发（最大 5 并发）
+- **多种输入方式** — 文件选择、拖拽上传、剪贴板粘贴、URL 链接输入
+- **客户端图片压缩** — Canvas 压缩后再上传
+- **LaTeX 公式渲染** — 识别结果中的数学公式通过 KaTeX 实时渲染
+- **智能重试机制** — 429/5xx/网络错误自动指数退避重试，支持 Retry-After
+- **键盘快捷操作** — 左右箭头切换图片、Escape 关闭弹窗
+- **一键复制结果** — 识别文本一键复制到剪贴板
+- **深色模式** — 自动跟随系统主题切换
+
+## 演示网站
+https://ocr.yoshinagakoi.eu.org/
+
+## 技术栈
+
+| 类别 | 技术 |
+|------|------|
+| 框架 | React 18 |
+| 构建 | Vite 6 |
+| 数学渲染 | KaTeX |
+| 样式 | Material Design 3 |
+
+## 项目结构
+
+```
+src/
+├── index.jsx                   # 入口
+├── App.jsx                     # 主组件
+├── App.css                     # 全局样式
+├── components/
+│   ├── UploadZone.jsx          # 上传区
+│   ├── ImagePreview.jsx        # 图片预览 + 导航
+│   ├── ImageModal.jsx          # 图片大图弹窗
+│   ├── ResultPanel.jsx         # 识别结果面板
+│   ├── SettingsDialog.jsx      # API 配置弹窗
+│   ├── KaTeXLine.jsx           # LaTeX 渲染
+│   └── ErrorBoundary.jsx       # 错误边界
+├── hooks/
+│   ├── useOcrApi.js            # OCR 核心逻辑
+│   ├── useImageManager.js      # 图片列表状态管理
+│   ├── useSnackbar.js          # 消息提示
+│   └── useFocusTrap.js         # 焦点陷阱
+└── utils/
+    ├── compressImage.js        # 图片压缩
+    └── fetchImageFromUrl.js    # URL 图片加载 + CORS 代理回退
+```
+
+## 快速开始
+
+```bash
+# 安装依赖
+yarn install
+
+# 启动开发服务器
+yarn dev
+
+# 生产构建
+yarn build
+
+# 预览构建产物
+yarn preview
+```
+
+打开应用后，点击右上角设置图标配置 API 密钥即可使用。
+
+## 配置说明
+
+所有配置通过应用内设置弹窗管理，保存在浏览器 localStorage 中：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| API 地址 | `https://generativelanguage.googleapis.com/v1` | OpenAI 兼容接口 |
+| API 密钥 | — | 必填，Google Gemini 或兼容 API 的密钥 |
+| 模型名称 | `gemini-3-flash-preview` | 支持任意兼容模型 |
+| Prompt | 内置 OCR 转录提示词 | 可自定义 |
+
+## 部署
+
+项目已配置 Vercel 部署，推送到 GitHub 后可直接关联 Vercel 自动部署。
+
+```bash
+# 或使用 Vercel CLI
+vercel --prod
+```
+
+## License
+
+MIT
