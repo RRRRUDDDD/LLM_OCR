@@ -169,7 +169,8 @@ export default function UploadZone({
           <span className="material-icons-round">upload_file</span>
           <span>{hasImages ? '重新上传' : '上传图片'}</span>
         </label>
-        <input id="file-input" type="file" accept="image/*" onChange={handleFileInput} multiple hidden />
+        {/* P1-4: Use className instead of hidden for screen reader accessibility */}
+        <input id="file-input" type="file" accept="image/*" onChange={handleFileInput} multiple className="sr-only" />
         <button className="md-button md-button--outlined" onClick={() => setShowUrlInput(!showUrlInput)}>
           <span className="material-icons-round">link</span>
           <span>{showUrlInput ? '取消' : '使用链接'}</span>

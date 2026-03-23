@@ -32,7 +32,7 @@ function App() {
   } = useImageManager();
   const {
     results, isLoading, ensureResultSlots,
-    processFile, processFiles, clearResults,
+    processFile, processFiles, clearResults, cancelAll,
   } = useOcrApi(apiConfig);
 
   // Refs for latest values — used by paste handler to avoid stale closures
@@ -164,7 +164,7 @@ function App() {
     showSnack('配置已保存');
   }, [showSnack]);
 
-  // Copy result
+  // Copy current result
   const handleCopyText = useCallback(() => {
     if (results[currentIndex]) {
       navigator.clipboard.writeText(results[currentIndex])
@@ -173,17 +173,38 @@ function App() {
     }
   }, [results, currentIndex, showSnack]);
 
+  // Copy all results (multi-image)
+  const handleCopyAll = useCallback(() => {
+    // Check if any image is still processing
+    const totalImages = images.length;
+    const pendingCount = results.slice(0, totalImages).filter((r) => !r || r === '').length;
+    if (isLoading || pendingCount > 0) {
+      showSnack(`还有 ${Math.max(pendingCount, 1)} 张图片正在识别中，请稍等`, 'error');
+      return;
+    }
+
+    const allText = results
+      .slice(0, totalImages)
+      .map((text, i) => `--- 第 ${i + 1} 张 ---\n${text}`)
+      .join('\n\n');
+
+    navigator.clipboard.writeText(allText)
+      .then(() => showSnack(`已复制全部 ${totalImages} 张图片的识别结果`))
+      .catch((err) => console.error('复制失败:', err));
+  }, [images.length, results, isLoading, showSnack]);
+
   const clearPastedUrl = useCallback(() => setPastedUrl(''), []);
   const openSettings = useCallback(() => setShowSettings(true), []);
   const closeSettings = useCallback(() => setShowSettings(false), []);
   const openModal = useCallback(() => setShowModal(true), []);
   const closeModal = useCallback(() => setShowModal(false), []);
 
-  // Clear both images and results together
+  // P0-2: Clear — cancel in-flight requests first, then clear UI state
   const handleClearAll = useCallback(() => {
+    cancelAll();
     clearAll();
     clearResults();
-  }, [clearAll, clearResults]);
+  }, [cancelAll, clearAll, clearResults]);
 
   return (
     <div className="md-app">
@@ -238,7 +259,9 @@ function App() {
           result={results[currentIndex] || ''}
           isLoading={isLoading}
           currentIndex={currentIndex}
+          totalImages={images.length}
           onCopy={handleCopyText}
+          onCopyAll={handleCopyAll}
         />
       </main>
 

@@ -2,6 +2,9 @@
  * Compress an image file via Canvas before base64 encoding.
  * Only compresses when the image exceeds the size threshold.
  *
+ * P2-2: Uses canvas.toBlob (async) instead of canvas.toDataURL (sync)
+ * to avoid blocking the main thread on large images.
+ *
  * @param {File} file          - Source image file
  * @param {object} [opts]
  * @param {number} [opts.maxDim=2048]       - Max width/height (px)
@@ -59,13 +62,32 @@ export default function compressImage(file, opts = {}) {
       }
       const effectiveQuality = outputType === 'image/png' ? undefined : quality;
 
-      const dataUrl = canvas.toDataURL(outputType, effectiveQuality);
-      const commaIdx = dataUrl.indexOf(',');
-
-      // Release pixel buffer immediately (~width*height*4 bytes)
-      canvas.width = canvas.height = 0;
-
-      resolve({ base64: dataUrl.slice(commaIdx + 1), mimeType: outputType });
+      // P2-2: Use toBlob (async) instead of toDataURL (sync) to avoid blocking main thread
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            // Release pixel buffer
+            canvas.width = canvas.height = 0;
+            reject(new Error('Failed to compress image'));
+            return;
+          }
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const dataUrl = reader.result;
+            const commaIdx = dataUrl.indexOf(',');
+            // Release pixel buffer immediately (~width*height*4 bytes)
+            canvas.width = canvas.height = 0;
+            resolve({ base64: dataUrl.slice(commaIdx + 1), mimeType: outputType });
+          };
+          reader.onerror = () => {
+            canvas.width = canvas.height = 0;
+            reject(new Error('Failed to read compressed blob'));
+          };
+          reader.readAsDataURL(blob);
+        },
+        outputType,
+        effectiveQuality,
+      );
     };
 
     img.onerror = () => {

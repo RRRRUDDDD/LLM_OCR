@@ -1,8 +1,11 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import compressImage from '../utils/compressImage';
 
 /**
  * Handles OCR API calls with streaming SSE.
+ *
+ * Supports both OpenAI-compatible and Gemini Native API formats.
+ * Auto-detects provider based on baseUrl.
  *
  * Optimizations:
  * - Client-side image compression via Canvas (compressImage)
@@ -15,6 +18,101 @@ import compressImage from '../utils/compressImage';
 const MAX_RETRIES = 3;
 /** Base delay in ms for exponential backoff */
 const BASE_DELAY_MS = 1000;
+
+/**
+ * Detect if baseUrl points to Gemini Native API (not OpenAI-compatible endpoint).
+ * Gemini OpenAI-compatible endpoints contain '/openai' in the path.
+ */
+function isGeminiNative(baseUrl) {
+  return baseUrl.includes('googleapis.com') && !baseUrl.includes('/openai');
+}
+
+/**
+ * Build request URL, headers, and body based on provider.
+ * @returns {{ url: string, headers: Record<string, string>, body: string }}
+ */
+function buildRequest(apiConfig, base64, mimeType) {
+  const { baseUrl, apiKey, model, prompt } = apiConfig;
+
+  if (isGeminiNative(baseUrl)) {
+    // Gemini Native: POST {baseUrl}/models/{model}:streamGenerateContent?alt=sse&key={apiKey}
+    const url = `${baseUrl.replace(/\/+$/, '')}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    return {
+      url,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: prompt }] },
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { inline_data: { mime_type: mimeType, data: base64 } },
+            ],
+          },
+        ],
+        generationConfig: { temperature: 0, maxOutputTokens: 8192 },
+      }),
+    };
+  }
+
+  // OpenAI-compatible: POST {baseUrl}/chat/completions
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  return {
+    url,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      stream: true,
+      messages: [
+        { role: 'system', content: prompt },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: `data:${mimeType};base64,${base64}` },
+            },
+          ],
+        },
+      ],
+      temperature: 0,
+      max_tokens: 8192,
+    }),
+  };
+}
+
+/**
+ * Parse a single SSE data line and extract text content.
+ * Handles both OpenAI and Gemini Native response formats.
+ * Compatible with 'data: {...}' and 'data:{...}' (with or without space).
+ *
+ * @param {string} line - Raw SSE line
+ * @param {boolean} geminiNative - Whether to parse as Gemini Native format
+ * @returns {string} Extracted text content, or empty string
+ */
+function parseSSELine(line, geminiNative) {
+  // Must start with 'data:'
+  if (!line.startsWith('data:')) return '';
+
+  // Extract payload — handle both 'data: {...}' and 'data:{...}'
+  const payload = line.slice(line.indexOf(':') + 1).trim();
+  if (!payload || payload === '[DONE]') return '';
+
+  try {
+    const data = JSON.parse(payload);
+    if (geminiNative) {
+      // Gemini Native: candidates[0].content.parts[0].text
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    }
+    // OpenAI: choices[0].delta.content
+    return data.choices?.[0]?.delta?.content || '';
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Abort-aware delay — resolves after `ms` or rejects immediately on abort signal.
@@ -91,6 +189,28 @@ export default function useOcrApi(apiConfig) {
   const rafIdsRef = useRef(new Map());
   const activeCountRef = useRef(0);
 
+  // P2-1: Cleanup all pending requests and rAFs on unmount
+  useEffect(() => {
+    const controllers = abortControllersRef.current;
+    const rafIds = rafIdsRef.current;
+    return () => {
+      controllers.forEach((c) => c.abort());
+      rafIds.forEach((id) => cancelAnimationFrame(id));
+      controllers.clear();
+      rafIds.clear();
+    };
+  }, []);
+
+  // P0-2: Cancel all in-flight requests + pending rAFs
+  const cancelAll = useCallback(() => {
+    abortControllersRef.current.forEach((c) => c.abort());
+    abortControllersRef.current.clear();
+    rafIdsRef.current.forEach((id) => cancelAnimationFrame(id));
+    rafIdsRef.current.clear();
+    activeCountRef.current = 0;
+    setIsLoading(false);
+  }, []);
+
   const ensureResultSlots = useCallback((count) => {
     setResults((prev) => {
       if (prev.length >= count) return prev;
@@ -113,6 +233,9 @@ export default function useOcrApi(apiConfig) {
     activeCountRef.current++;
     setIsLoading(true);
 
+    // Detect provider format
+    const geminiNative = isGeminiNative(apiConfig.baseUrl);
+
     try {
       // Clear previous result for this index
       setResults((prev) => {
@@ -124,32 +247,15 @@ export default function useOcrApi(apiConfig) {
       // Compress image before base64 encoding (skips small files automatically)
       const { base64, mimeType } = await compressImage(file);
 
+      // P0-1: Build provider-specific request
+      const { url, headers, body } = buildRequest(apiConfig, base64, mimeType);
+
       const response = await fetchWithRetry(
-        `${apiConfig.baseUrl}/chat/completions`,
+        url,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiConfig.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: apiConfig.model,
-            stream: true,
-            messages: [
-              { role: 'system', content: apiConfig.prompt },
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'image_url',
-                    image_url: { url: `data:${mimeType};base64,${base64}` },
-                  },
-                ],
-              },
-            ],
-            temperature: 0,
-            max_tokens: 8192,
-          }),
+          headers,
+          body,
           signal: controller.signal,
         },
       );
@@ -186,33 +292,27 @@ export default function useOcrApi(apiConfig) {
         const chunk = decoder.decode(value, { stream: true });
         lineBuffer += chunk;
 
+        // P2-4: Normalize \r\n to \n before splitting
+        lineBuffer = lineBuffer.replace(/\r/g, '');
+
         // Process complete lines only; keep incomplete last line in buffer
         const lines = lineBuffer.split('\n');
         lineBuffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-            try {
-              const data = JSON.parse(line.slice(6));
-              const content = data.choices?.[0]?.delta?.content || '';
-              if (content) {
-                fullText += content;
-                scheduleUpdate();
-              }
-            } catch {
-              // skip invalid JSON lines
-            }
+          // P2-4: Use parseSSELine for compatible parsing (handles 'data:' with/without space)
+          const content = parseSSELine(line, geminiNative);
+          if (content) {
+            fullText += content;
+            scheduleUpdate();
           }
         }
       }
 
       // Process any remaining data in buffer
-      if (lineBuffer.startsWith('data: ') && lineBuffer !== 'data: [DONE]') {
-        try {
-          const data = JSON.parse(lineBuffer.slice(6));
-          const content = data.choices?.[0]?.delta?.content || '';
-          if (content) fullText += content;
-        } catch { /* skip */ }
+      if (lineBuffer) {
+        const content = parseSSELine(lineBuffer, geminiNative);
+        if (content) fullText += content;
       }
 
       // Final flush — cancel pending rAF for this index, commit last text
@@ -235,8 +335,16 @@ export default function useOcrApi(apiConfig) {
         return r;
       });
     } finally {
-      abortControllersRef.current.delete(index);
-      rafIdsRef.current.delete(index);
+      // P0-2: Fix race condition — only delete if this controller is still the current one
+      if (abortControllersRef.current.get(index) === controller) {
+        abortControllersRef.current.delete(index);
+      }
+      // Clean up rAF for this index
+      const leftoverRaf = rafIdsRef.current.get(index);
+      if (leftoverRaf != null) {
+        cancelAnimationFrame(leftoverRaf);
+        rafIdsRef.current.delete(index);
+      }
       activeCountRef.current--;
       if (activeCountRef.current === 0) setIsLoading(false);
     }
@@ -247,6 +355,8 @@ export default function useOcrApi(apiConfig) {
   const processFiles = useCallback(async (files, startIndex, maxConcurrent = 5) => {
     if (files.length === 0) return;
 
+    // P2-5: Guard against invalid maxConcurrent
+    const concurrency = Math.max(1, maxConcurrent);
     let nextIdx = 0;
     const total = files.length;
 
@@ -254,7 +364,7 @@ export default function useOcrApi(apiConfig) {
       let completed = 0;
 
       const startNext = () => {
-        while (nextIdx < total && (nextIdx - completed) < maxConcurrent) {
+        while (nextIdx < total && (nextIdx - completed) < concurrency) {
           const i = nextIdx++;
           processFile(files[i], startIndex + i).catch(() => {}).then(() => {
             completed++;
@@ -282,5 +392,6 @@ export default function useOcrApi(apiConfig) {
     processFile,
     processFiles,
     clearResults,
+    cancelAll,
   };
 }

@@ -408,6 +408,7 @@ body {
   border-color: var(--md-secondary);
   background: rgba(0, 137, 123, 0.05);
   transform: scale(1.01);
+  animation: md-drag-pulse 1.5s ease-in-out infinite;
 }
 
 .upload-zone.dragging .upload-actions,
@@ -622,11 +623,24 @@ body {
   box-shadow: var(--md-elevation-2);
 }
 
+.image-preview:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 2px;
+}
+
 .image-preview img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  transition: opacity var(--md-duration-medium2) var(--md-easing-standard);
+}
+
+.image-preview img.fade-enter {
+  opacity: 0;
+}
+.image-preview img.fade-active {
+  opacity: 1;
 }
 
 /* — Loading overlay with circular progress — */
@@ -656,14 +670,15 @@ body {
    =================================================================== */
 .result-card {
   flex: 1;
-  min-width: 0;
+  min-width: 280px;
   max-height: calc(100vh - 120px);
   position: sticky;
   top: 88px;
   display: flex;
   flex-direction: column;
   opacity: 0;
-  animation: md-fade-in var(--md-duration-medium4) var(--md-easing-decelerate) forwards;
+  transform: translateY(8px);
+  animation: md-slide-up var(--md-duration-medium4) var(--md-easing-decelerate) forwards;
 }
 
 .result-card:hover {
@@ -717,9 +732,11 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding-bottom: 12px;
   margin-bottom: 16px;
   border-bottom: 1px solid var(--md-outline-variant);
+  flex-wrap: wrap;
 }
 
 .result-header__info {
@@ -730,11 +747,21 @@ body {
   font-weight: 500;
   color: var(--md-on-surface-variant);
   letter-spacing: 0.1px;
+  flex: 1;
+  min-width: 0;
 }
 
 .result-header__info .material-icons-round {
   font-size: 20px;
   color: var(--md-primary);
+  flex-shrink: 0;
+}
+
+/* — Button group in result header — */
+.result-header__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .result-body {
@@ -1109,6 +1136,22 @@ body {
   50%      { transform: translateY(-6px); }
 }
 
+@keyframes md-drag-pulse {
+  0%, 100% { border-color: var(--md-secondary); background: rgba(0, 137, 123, 0.05); }
+  50%      { border-color: var(--md-primary); background: rgba(103, 80, 164, 0.06); }
+}
+
+@keyframes md-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ===================================================================
    Responsive — MD3 3-stage layout (Compact / Medium / Expanded)
    =================================================================== */
@@ -1121,12 +1164,16 @@ body {
   .md-main { padding: 20px 16px 40px; }
 
   .upload-card.with-image {
-    width: 280px;
-    max-width: 280px;
+    width: 300px;
+    max-width: 300px;
   }
 
   .result-container { padding: 16px 20px; }
   .settings-dialog { width: calc(100vw - 48px); }
+
+  .result-header__actions {
+    flex-wrap: wrap;
+  }
 }
 
 /* --- Compact (<600px): phone --- */
@@ -1140,6 +1187,7 @@ body {
 
   .md-main.has-content {
     flex-direction: column;
+    justify-content: flex-start;
   }
 
   .upload-card,
@@ -1150,6 +1198,8 @@ body {
 
   .result-card {
     max-height: 50vh;
+    min-width: 0;
+    width: 100%;
     position: relative;
     top: 0;
   }
@@ -1165,8 +1215,15 @@ body {
     align-items: flex-start;
   }
 
-  .result-header .md-button {
+  .result-header__actions {
     width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+
+  .result-header__actions .md-button {
+    flex: 1;
+    justify-content: center;
   }
 
   .upload-actions {
@@ -1222,10 +1279,19 @@ body {
 }
 
 /* ===================================================================
-   Hidden file input
+   Screen-reader only (P1-4: replaces display:none for file input)
    =================================================================== */
-#file-input {
-  display: none;
+#file-input,
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ===================================================================
@@ -1318,5 +1384,24 @@ body {
   }
   .result-container::-webkit-scrollbar-thumb:hover {
     background: var(--md-outline);
+  }
+
+  /* Upload zone: brighter dashed border for dark mode visibility */
+  .upload-zone {
+    border-color: var(--md-outline);
+  }
+}
+
+/* ===================================================================
+   Reduced Motion (P2-3: accessibility for vestibular disorders)
+   =================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

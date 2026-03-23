@@ -24,6 +24,7 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
+      // P0-3: Use CSS variables instead of hardcoded colors for dark mode support
       return (
         <div style={{
           display: 'flex',
@@ -32,17 +33,18 @@ export default class ErrorBoundary extends Component {
           justifyContent: 'center',
           minHeight: '100vh',
           padding: '24px',
-          fontFamily: 'Roboto, sans-serif',
-          color: '#1C1B1F',
+          fontFamily: 'var(--md-font, Roboto, sans-serif)',
+          color: 'var(--md-on-surface, #1C1B1F)',
+          background: 'var(--md-background, #FFFBFE)',
           textAlign: 'center',
         }}>
-          <span className="material-icons-round" style={{ fontSize: 64, color: '#B3261E', marginBottom: 16 }}>
+          <span className="material-icons-round" style={{ fontSize: 64, color: 'var(--md-error, #B3261E)', marginBottom: 16 }}>
             error_outline
           </span>
           <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 500 }}>
             出错了
           </h2>
-          <p style={{ margin: '0 0 24px', color: '#49454F', fontSize: 14 }}>
+          <p style={{ margin: '0 0 24px', color: 'var(--md-on-surface-variant, #49454F)', fontSize: 14 }}>
             {this.state.error?.message || '发生未知错误'}
           </p>
           <button
@@ -52,8 +54,8 @@ export default class ErrorBoundary extends Component {
               padding: '0 24px',
               borderRadius: 9999,
               border: 'none',
-              background: '#6750A4',
-              color: '#FFFFFF',
+              background: 'var(--md-primary, #6750A4)',
+              color: 'var(--md-on-primary, #FFFFFF)',
               fontSize: 14,
               fontWeight: 500,
               cursor: 'pointer',

@@ -5,15 +5,16 @@
 ## 功能特性
 
 - **LLM 驱动识别** — 使用多模态大模型进行文字识别，非传统 OCR 引擎
+- **多 API 格式适配** — 自动识别 Gemini Native API 与 OpenAI 兼容格式，无需手动切换
 - **流式实时输出** — 通过 SSE 流式返回识别结果，逐字显示
 - **多图批量处理** — 支持同时上传多张图片，滑动窗口并发（最大 5 并发）
 - **多种输入方式** — 文件选择、拖拽上传、剪贴板粘贴、URL 链接输入
-- **客户端图片压缩** — Canvas 压缩后再上传
+- **客户端图片压缩** — Canvas 异步压缩后再上传，不阻塞主线程
 - **LaTeX 公式渲染** — 识别结果中的数学公式通过 KaTeX 实时渲染
 - **智能重试机制** — 429/5xx/网络错误自动指数退避重试，支持 Retry-After
-- **键盘快捷操作** — 左右箭头切换图片、Escape 关闭弹窗
-- **一键复制结果** — 识别文本一键复制到剪贴板
+- **键盘快捷操作** — 左右箭头切换图片、Escape 关闭弹窗、Tab 键完整导航
 - **深色模式** — 自动跟随系统主题切换
+- **无障碍支持** — 焦点管理、ARIA 标签、prefers-reduced-motion 动效降级
 
 ## 演示网站
 https://ocr.yoshinagakoi.eu.org/
@@ -48,8 +49,8 @@ src/
 │   ├── useSnackbar.js          # 消息提示
 │   └── useFocusTrap.js         # 焦点陷阱
 └── utils/
-    ├── compressImage.js        # 图片压缩
-    └── fetchImageFromUrl.js    # URL 图片加载 + CORS 代理回退
+    ├── compressImage.js        # 图片异步压缩
+    └── fetchImageFromUrl.js    # URL 图片加载
 ```
 
 ## 快速开始
@@ -76,10 +77,17 @@ yarn preview
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| API 地址 | `https://generativelanguage.googleapis.com/v1` | OpenAI 兼容接口 |
+| API 地址 | `https://generativelanguage.googleapis.com/v1beta` | 支持 Gemini Native 和 OpenAI 兼容格式，自动识别 |
 | API 密钥 | — | 必填，Google Gemini 或兼容 API 的密钥 |
-| 模型名称 | `gemini-3-flash-preview` | 支持任意兼容模型 |
+| 模型名称 | `gemini-2.5-flash` | 支持任意兼容模型 |
 | Prompt | 内置 OCR 转录提示词 | 可自定义 |
+
+### API 格式自动适配
+
+应用会根据 API 地址自动选择请求格式：
+
+- **Gemini Native**：地址包含 `googleapis.com` 且不包含 `/openai` → 使用 `streamGenerateContent` 格式
+- **OpenAI 兼容**：其他地址 → 使用 `chat/completions` 格式
 
 ## 部署
 

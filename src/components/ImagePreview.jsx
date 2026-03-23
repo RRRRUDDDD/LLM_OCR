@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 
 export default memo(function ImagePreview({
   images,
@@ -11,6 +11,21 @@ export default memo(function ImagePreview({
   onClick,
   onClear,
 }) {
+  // Fade transition on image switch
+  const [fadeClass, setFadeClass] = useState('');
+  const prevIndexRef = useRef(currentIndex);
+
+  useEffect(() => {
+    if (prevIndexRef.current !== currentIndex) {
+      setFadeClass('fade-enter');
+      const raf = requestAnimationFrame(() => {
+        setFadeClass('fade-active');
+      });
+      prevIndexRef.current = currentIndex;
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [currentIndex]);
+
   if (images.length === 0) return null;
 
   return (
@@ -29,8 +44,20 @@ export default memo(function ImagePreview({
           </button>
         )}
       </div>
-      <div className="image-preview" onClick={onClick}>
-        <img src={images[currentIndex]} alt={`第 ${currentIndex + 1} 张图片预览`} />
+      <div
+        className="image-preview"
+        onClick={onClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+        aria-label="点击放大查看图片"
+      >
+        <img
+          src={images[currentIndex]}
+          alt={`第 ${currentIndex + 1} 张图片预览`}
+          className={fadeClass}
+          onTransitionEnd={() => setFadeClass('')}
+        />
         {isLoading && (
           <div className="loading-overlay">
             <div className="md-circular-progress"></div>
