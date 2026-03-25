@@ -10,13 +10,8 @@ export default function useSnackbar(duration = 2500) {
   const [type, setType] = useState('success');
   const timerRef = useRef(null);
 
-  // Cleanup timer on unmount to prevent setState on unmounted component
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
-  /**
-   * @param {string} msg
-   * @param {SnackbarType} [msgType='success']
-   */
   const show = useCallback((msg, msgType = 'success') => {
     setMessage(msg);
     setType(msgType);

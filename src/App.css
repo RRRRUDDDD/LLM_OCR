@@ -1,30 +1,22 @@
-/* ===================================================================
-   Material Design 3 — Token System
-   =================================================================== */
 :root {
-  /* Primary */
   --md-primary: #6750A4;
   --md-on-primary: #FFFFFF;
   --md-primary-container: #EADDFF;
   --md-on-primary-container: #21005D;
 
-  /* Secondary (Teal) */
   --md-secondary: #00897B;
   --md-on-secondary: #FFFFFF;
   --md-secondary-container: #B2DFDB;
   --md-on-secondary-container: #00251A;
 
-  /* Tertiary */
   --md-tertiary: #7D5260;
   --md-on-tertiary: #FFFFFF;
   --md-tertiary-container: #FFD8E4;
 
-  /* Error */
   --md-error: #B3261E;
   --md-on-error: #FFFFFF;
   --md-error-container: #F9DEDC;
 
-  /* Surface & Background */
   --md-surface: #FFFBFE;
   --md-surface-dim: #DED8E1;
   --md-surface-bright: #FFFBFE;
@@ -41,11 +33,9 @@
   --md-inverse-primary: #D0BCFF;
   --md-background: #FFFBFE;
 
-  /* Outline */
   --md-outline: #79747E;
   --md-outline-variant: #CAC4D0;
 
-  /* Elevation shadows (MD3 style) */
   --md-elevation-0: none;
   --md-elevation-1: 0 1px 2px rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15);
   --md-elevation-2: 0 1px 2px rgba(0,0,0,0.3), 0 2px 6px 2px rgba(0,0,0,0.15);
@@ -53,7 +43,6 @@
   --md-elevation-4: 0 6px 10px 4px rgba(0,0,0,0.15), 0 2px 3px rgba(0,0,0,0.3);
   --md-elevation-5: 0 8px 12px 6px rgba(0,0,0,0.15), 0 4px 4px rgba(0,0,0,0.3);
 
-  /* Shape */
   --md-shape-xs: 4px;
   --md-shape-sm: 8px;
   --md-shape-md: 12px;
@@ -61,10 +50,13 @@
   --md-shape-xl: 28px;
   --md-shape-full: 9999px;
 
-  /* Typography */
   --md-font: 'Roboto', 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-  /* Motion */
+  --md-loading-overlay-bg: rgba(255, 251, 254, 0.8);
+
+  --md-disabled-bg: rgba(28, 27, 31, 0.12);
+  --md-disabled-fg: rgba(28, 27, 31, 0.38);
+
   --md-easing-standard: cubic-bezier(0.2, 0, 0, 1);
   --md-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
   --md-easing-decelerate: cubic-bezier(0, 0, 0, 1);
@@ -78,9 +70,78 @@
   --md-duration-long2: 500ms;
 }
 
-/* ===================================================================
-   Font Fallback (reduce FOUT layout shift)
-   =================================================================== */
+[data-theme="dark"] {
+  --md-primary: #D0BCFF;
+  --md-on-primary: #381E72;
+  --md-primary-container: #4F378B;
+  --md-on-primary-container: #EADDFF;
+
+  --md-secondary: #80CBC4;
+  --md-on-secondary: #003733;
+  --md-secondary-container: #004D47;
+  --md-on-secondary-container: #B2DFDB;
+
+  --md-tertiary: #EFB8C8;
+  --md-on-tertiary: #492532;
+  --md-tertiary-container: #633B48;
+
+  --md-error: #F2B8B5;
+  --md-on-error: #601410;
+  --md-error-container: #8C1D18;
+
+  --md-background: #1C1B1F;
+  --md-surface: #1C1B1F;
+  --md-surface-dim: #141218;
+  --md-surface-bright: #3B383E;
+  --md-surface-container-lowest: #0F0D13;
+  --md-surface-container-low: #1D1B20;
+  --md-surface-container: #211F26;
+  --md-surface-container-high: #2B2930;
+  --md-surface-container-highest: #36343B;
+  --md-on-surface: #E6E1E5;
+  --md-on-surface-variant: #CAC4D0;
+  --md-surface-variant: #49454F;
+  --md-inverse-surface: #E6E1E5;
+  --md-inverse-on-surface: #313033;
+  --md-inverse-primary: #6750A4;
+
+  --md-outline: #938F99;
+  --md-outline-variant: #49454F;
+
+  --md-disabled-bg: rgba(230, 225, 229, 0.12);
+  --md-disabled-fg: rgba(230, 225, 229, 0.38);
+  --md-loading-overlay-bg: rgba(28, 27, 31, 0.7);
+
+  --md-elevation-1: 0 1px 3px 1px rgba(0,0,0,0.30), 0 1px 2px rgba(0,0,0,0.50);
+  --md-elevation-2: 0 2px 6px 2px rgba(0,0,0,0.30), 0 1px 2px rgba(0,0,0,0.50);
+  --md-elevation-3: 0 4px 8px 3px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.50);
+  --md-elevation-4: 0 6px 10px 4px rgba(0,0,0,0.30), 0 2px 3px rgba(0,0,0,0.50);
+  --md-elevation-5: 0 8px 12px 6px rgba(0,0,0,0.30), 0 4px 4px rgba(0,0,0,0.50);
+}
+
+[data-theme="dark"] .md-scrim { background: rgba(0, 0, 0, 0.75); }
+[data-theme="dark"] .loading-overlay { background: var(--md-loading-overlay-bg); }
+
+
+[data-theme="dark"] .md-text-field__label {
+  background: var(--md-surface-container-lowest);
+}
+[data-theme="dark"] .settings-dialog .md-text-field__label {
+  background: var(--md-surface-container-high);
+}
+
+[data-theme="dark"] .result-container::-webkit-scrollbar-thumb {
+  background: var(--md-outline-variant);
+  border-color: var(--md-surface-container-lowest);
+}
+[data-theme="dark"] .result-container::-webkit-scrollbar-thumb:hover {
+  background: var(--md-outline);
+}
+
+[data-theme="dark"] .upload-zone {
+  border-color: var(--md-outline);
+}
+
 @font-face {
   font-family: 'Roboto-fallback';
   src: local('Segoe UI');
@@ -89,9 +150,6 @@
   descent-override: 22%;
 }
 
-/* ===================================================================
-   Base & Reset
-   =================================================================== */
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -106,18 +164,12 @@ body {
   min-height: 100vh;
 }
 
-/* ===================================================================
-   App Root
-   =================================================================== */
 .md-app {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-/* ===================================================================
-   Top App Bar  (Elevation 2)
-   =================================================================== */
 .md-top-app-bar {
   position: sticky;
   top: 0;
@@ -154,9 +206,6 @@ body {
   line-height: 28px;
 }
 
-/* ===================================================================
-   Main Layout
-   =================================================================== */
 .md-main {
   flex: 1;
   max-width: 1200px;
@@ -177,9 +226,6 @@ body {
   align-items: flex-start;
 }
 
-/* ===================================================================
-   Hero subtitle (shown above the upload card when no images)
-   =================================================================== */
 .hero-subtitle {
   text-align: center;
   margin: 16px 0 8px;
@@ -190,9 +236,6 @@ body {
   letter-spacing: 0.5px;
 }
 
-/* ===================================================================
-   Card (Paper Surface)
-   =================================================================== */
 .md-card {
   background: var(--md-surface-container-lowest);
   border-radius: var(--md-shape-md);
@@ -207,9 +250,6 @@ body {
 .md-elevation-4 { box-shadow: var(--md-elevation-4); }
 .md-elevation-5 { box-shadow: var(--md-elevation-5); }
 
-/* ===================================================================
-   Buttons — Filled, Tonal, Outlined, Text
-   =================================================================== */
 .md-button {
   display: inline-flex;
   align-items: center;
@@ -239,7 +279,6 @@ body {
   font-size: 18px;
 }
 
-/* — Ripple effect (CSS-only, center-origin) — */
 .md-button::before {
   content: '';
   position: absolute;
@@ -255,7 +294,6 @@ body {
   animation: md-ripple 0.5s var(--md-easing-decelerate) forwards;
 }
 
-/* — State layer (hover / active) — */
 .md-button::after {
   content: '';
   position: absolute;
@@ -269,7 +307,6 @@ body {
 .md-button:active::after { opacity: 0.12; }
 .md-button:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
 
-/* Filled */
 .md-button--filled {
   background: var(--md-primary);
   color: var(--md-on-primary);
@@ -277,30 +314,26 @@ body {
 }
 .md-button--filled:hover { box-shadow: var(--md-elevation-1); }
 
-/* Tonal (secondary container) */
 .md-button--tonal {
   background: var(--md-secondary-container);
   color: var(--md-on-secondary-container);
 }
 
-/* Outlined */
 .md-button--outlined {
   background: transparent;
   color: var(--md-primary);
   border: 1px solid var(--md-outline);
 }
 
-/* Text */
 .md-button--text {
   background: transparent;
   color: var(--md-primary);
   padding: 0 12px;
 }
 
-/* Disabled */
 .md-button:disabled {
-  background: rgba(28, 27, 31, 0.12);
-  color: rgba(28, 27, 31, 0.38);
+  background: var(--md-disabled-bg);
+  color: var(--md-disabled-fg);
   box-shadow: none;
   cursor: default;
   pointer-events: none;
@@ -308,12 +341,9 @@ body {
 
 .md-button--outlined:disabled {
   background: transparent;
-  border-color: rgba(28, 27, 31, 0.12);
+  border-color: var(--md-disabled-bg);
 }
 
-/* ===================================================================
-   Icon Button
-   =================================================================== */
 .md-icon-button {
   display: inline-flex;
   align-items: center;
@@ -335,6 +365,13 @@ body {
 .md-icon-button .material-icons-round { font-size: 24px; }
 .md-icon-button svg { width: 24px; height: 24px; fill: currentColor; }
 
+.github-icon {
+  width: 22px;
+  height: 22px;
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
+}
+.md-icon-button:hover .github-icon { opacity: 0.85; }
+
 .md-icon-button::after {
   content: '';
   position: absolute;
@@ -349,7 +386,7 @@ body {
 .md-icon-button:active::after { opacity: 0.12; }
 
 .md-icon-button:disabled {
-  color: rgba(28, 27, 31, 0.38);
+  color: var(--md-disabled-fg);
   cursor: default;
   pointer-events: none;
 }
@@ -359,9 +396,6 @@ body {
   color: var(--md-on-primary);
 }
 
-/* ===================================================================
-   Upload Card
-   =================================================================== */
 .upload-card {
   width: 100%;
   max-width: 560px;
@@ -377,14 +411,10 @@ body {
   flex-shrink: 0;
 }
 
-/* Card hover elevation */
 .upload-card:hover {
   box-shadow: var(--md-elevation-2);
 }
 
-/* ===================================================================
-   Upload Zone (Drag‑Drop Surface)
-   =================================================================== */
 .upload-zone {
   border: 2px dashed var(--md-outline-variant);
   border-radius: var(--md-shape-md);
@@ -403,12 +433,11 @@ body {
   justify-content: center;
 }
 
-/* — Drag active — */
 .upload-zone.dragging {
   border-color: var(--md-secondary);
-  background: rgba(0, 137, 123, 0.05);
+  background: color-mix(in srgb, var(--md-secondary) 5%, transparent);
   transform: scale(1.01);
-  animation: md-drag-pulse 1.5s ease-in-out infinite;
+  animation: md-drag-pulse 1.5s var(--md-easing-standard) infinite;
 }
 
 .upload-zone.dragging .upload-actions,
@@ -418,7 +447,6 @@ body {
 }
 
 .upload-zone.dragging::before {
-  content: '松开以上传图片';
   position: absolute;
   inset: 0;
   display: flex;
@@ -431,7 +459,20 @@ body {
   animation: md-fade-in var(--md-duration-medium2) var(--md-easing-decelerate);
 }
 
-/* — Empty state illustration — */
+.upload-zone__drag-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-secondary);
+  z-index: 10;
+  pointer-events: none;
+  animation: md-fade-in var(--md-duration-medium2) var(--md-easing-decelerate);
+}
+
 .upload-zone__empty {
   display: flex;
   flex-direction: column;
@@ -446,7 +487,6 @@ body {
   opacity: 0.6;
 }
 
-/* Enhanced empty state — icon in tinted circle with float animation */
 .upload-zone__icon-wrapper {
   width: 80px;
   height: 80px;
@@ -455,7 +495,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: md-gentle-float 3s ease-in-out infinite;
+  animation: md-gentle-float 3s var(--md-easing-standard) infinite;
+  will-change: transform;
 }
 
 .upload-zone__icon-wrapper .material-icons-round {
@@ -476,7 +517,6 @@ body {
   margin: 0;
 }
 
-/* — Button row — */
 .upload-actions {
   display: flex;
   gap: 12px;
@@ -485,9 +525,6 @@ body {
   transition: opacity var(--md-duration-medium2) var(--md-easing-standard);
 }
 
-/* ===================================================================
-   URL Form & Text Field (outlined)
-   =================================================================== */
 .url-form {
   display: flex;
   gap: 12px;
@@ -524,7 +561,7 @@ body {
 .md-text-field__input:focus {
   border-color: var(--md-primary);
   border-width: 2px;
-  padding: 0 15px; /* compensate for thicker border */
+  padding: 0 15px; 
   box-shadow: none;
 }
 
@@ -553,7 +590,6 @@ body {
   color: var(--md-primary);
 }
 
-/* Textarea variant */
 .md-text-field--textarea {
   flex: unset;
 }
@@ -584,9 +620,6 @@ body {
   color: var(--md-primary);
 }
 
-/* ===================================================================
-   Image Preview
-   =================================================================== */
 .image-preview-wrapper {
   margin-top: 16px;
 }
@@ -643,14 +676,13 @@ body {
   opacity: 1;
 }
 
-/* — Loading overlay with circular progress — */
 .loading-overlay {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 251, 254, 0.7);
+  background: var(--md-loading-overlay-bg);
   z-index: 2;
   border-radius: inherit;
 }
@@ -665,9 +697,6 @@ body {
   will-change: transform;
 }
 
-/* ===================================================================
-   Result Card
-   =================================================================== */
 .result-card {
   flex: 1;
   min-width: 280px;
@@ -704,10 +733,12 @@ body {
   padding: 20px 24px;
   scroll-behavior: smooth;
   min-height: 300px;
+  display: flex;
+  flex-direction: column;
 }
 
-/* — Loading state — */
 .loading-state {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -725,9 +756,6 @@ body {
   animation: md-spin 1.5s var(--md-easing-standard) infinite;
 }
 
-/* ===================================================================
-   Result Text
-   =================================================================== */
 .result-header {
   display: flex;
   justify-content: space-between;
@@ -757,7 +785,6 @@ body {
   flex-shrink: 0;
 }
 
-/* — Button group in result header — */
 .result-header__actions {
   display: flex;
   gap: 8px;
@@ -770,12 +797,15 @@ body {
   font-size: 15px;
 }
 
+.result-text--enter {
+  animation: md-slide-up var(--md-duration-medium2) var(--md-easing-decelerate) both;
+}
+
 .streaming-text {
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-/* — Animated lines (only during streaming to avoid replay on image switch) — */
 .text-line {
   margin: 4px 0;
   min-height: 1.4em;
@@ -783,11 +813,11 @@ body {
 
 .streaming-text.is-streaming .text-line {
   opacity: 0;
-  animation: md-line-reveal 0.4s var(--md-easing-decelerate) forwards;
+  animation: md-line-reveal var(--md-duration-medium1) var(--md-easing-decelerate) forwards;
   animation-delay: min(calc(var(--line-index) * 30ms), 1s);
 }
 
-/* — LaTeX — */
+
 .latex-inline {
   display: inline-block;
   vertical-align: middle;
@@ -825,9 +855,6 @@ body {
   padding: 4px 0;
 }
 
-/* ===================================================================
-   Dialog (Modal)
-   =================================================================== */
 .md-scrim {
   position: fixed;
   inset: 0;
@@ -872,9 +899,6 @@ body {
   box-shadow: var(--md-elevation-3);
 }
 
-/* ===================================================================
-   Settings Dialog
-   =================================================================== */
 .settings-dialog {
   background: var(--md-surface-container-high);
   border-radius: var(--md-shape-xl);
@@ -919,7 +943,6 @@ body {
   align-items: center;
 }
 
-/* Helper / validation text */
 .settings-dialog__helper {
   font-size: 12px;
   line-height: 16px;
@@ -931,7 +954,16 @@ body {
   color: var(--md-error);
 }
 
-/* Error state on text field */
+.settings-dialog__helper--info {
+  color: var(--md-on-surface-variant);
+  background: var(--md-surface-variant, #e7e0ec22);
+  border-left: 3px solid var(--md-primary, #6750a4);
+  border-radius: 0 4px 4px 0;
+  padding: 6px 10px;
+  margin: 0 0 4px 0;
+  line-height: 1.5;
+}
+
 .md-text-field__input--error {
   border-color: var(--md-error);
 }
@@ -945,7 +977,6 @@ body {
   color: var(--md-error);
 }
 
-/* Text field with trailing icon (password toggle) */
 .md-text-field--with-trailing {
   position: relative;
 }
@@ -971,9 +1002,6 @@ body {
   font-size: 20px;
 }
 
-/* ===================================================================
-   Icon Button — Badge (unconfigured dot)
-   =================================================================== */
 .md-icon-button--badge {
   position: relative;
 }
@@ -990,9 +1018,6 @@ body {
   z-index: 1;
 }
 
-/* ===================================================================
-   Snackbar
-   =================================================================== */
 .md-snackbar {
   position: fixed;
   bottom: 24px;
@@ -1019,7 +1044,6 @@ body {
   color: var(--md-inverse-primary);
 }
 
-/* Error variant — red icon */
 .md-snackbar--error .material-icons-round {
   color: var(--md-error);
 }
@@ -1028,7 +1052,6 @@ body {
   flex: 1;
 }
 
-/* Snackbar dismiss button */
 .md-snackbar__dismiss {
   color: var(--md-inverse-on-surface);
   width: 32px;
@@ -1040,9 +1063,6 @@ body {
   color: var(--md-inverse-on-surface);
 }
 
-/* ===================================================================
-   Scrollbar (subtle, Material-like)
-   =================================================================== */
 .result-container::-webkit-scrollbar {
   width: 8px;
 }
@@ -1061,13 +1081,13 @@ body {
   background: var(--md-outline);
 }
 
-/* ===================================================================
-   GPU Compositing Hints
-   =================================================================== */
-.md-dialog,
-.settings-dialog,
-.md-snackbar,
 .md-scrim {
+  will-change: opacity;
+}
+
+.md-dialog.is-animating,
+.settings-dialog.is-animating,
+.md-snackbar.is-animating {
   will-change: transform, opacity;
 }
 
@@ -1075,9 +1095,6 @@ body {
   will-change: transform;
 }
 
-/* ===================================================================
-   Animations
-   =================================================================== */
 @keyframes md-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -1152,11 +1169,8 @@ body {
   }
 }
 
-/* ===================================================================
-   Responsive — MD3 3-stage layout (Compact / Medium / Expanded)
-   =================================================================== */
 
-/* --- Medium (600–839px): tablet portrait --- */
+
 @media (min-width: 600px) and (max-width: 839px) {
   .md-top-app-bar__row { height: 56px; }
   .md-top-app-bar__title { font-size: 20px; }
@@ -1176,7 +1190,6 @@ body {
   }
 }
 
-/* --- Compact (<600px): phone --- */
 @media (max-width: 599px) {
   .md-top-app-bar__row { height: 56px; }
   .md-top-app-bar__title { font-size: 18px; }
@@ -1268,7 +1281,6 @@ body {
   .latex-block-wrapper { max-width: 100%; overflow-x: auto; }
 }
 
-/* --- Touch targets: ensure 48dp minimum on touch devices --- */
 @media (pointer: coarse) {
   .md-icon-button {
     width: 48px;
@@ -1278,10 +1290,6 @@ body {
   .image-navigation { gap: 4px; }
 }
 
-/* ===================================================================
-   Screen-reader only (P1-4: replaces display:none for file input)
-   =================================================================== */
-#file-input,
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1294,107 +1302,6 @@ body {
   border: 0;
 }
 
-/* ===================================================================
-   Dark Theme  (prefers-color-scheme: dark)
-   MD3 dark palette — auto-adapts via CSS custom-property override
-   =================================================================== */
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Primary */
-    --md-primary: #D0BCFF;
-    --md-on-primary: #381E72;
-    --md-primary-container: #4F378B;
-    --md-on-primary-container: #EADDFF;
-
-    /* Secondary (Teal) */
-    --md-secondary: #80CBC4;
-    --md-on-secondary: #003731;
-    --md-secondary-container: #005048;
-    --md-on-secondary-container: #B2DFDB;
-
-    /* Tertiary */
-    --md-tertiary: #EFB8C8;
-    --md-on-tertiary: #492532;
-    --md-tertiary-container: #633B48;
-
-    /* Error */
-    --md-error: #F2B8B5;
-    --md-on-error: #601410;
-    --md-error-container: #8C1D18;
-
-    /* Surface & Background */
-    --md-surface: #1C1B1F;
-    --md-surface-dim: #141218;
-    --md-surface-bright: #3B383E;
-    --md-surface-container-lowest: #0F0D13;
-    --md-surface-container-low: #1D1B20;
-    --md-surface-container: #211F26;
-    --md-surface-container-high: #2B2930;
-    --md-surface-container-highest: #36343B;
-    --md-on-surface: #E6E1E5;
-    --md-on-surface-variant: #CAC4D0;
-    --md-surface-variant: #49454F;
-    --md-inverse-surface: #E6E1E5;
-    --md-inverse-on-surface: #313033;
-    --md-inverse-primary: #6750A4;
-    --md-background: #1C1B1F;
-
-    /* Outline */
-    --md-outline: #938F99;
-    --md-outline-variant: #49454F;
-
-    /* Elevation — subtler shadows for dark surfaces */
-    --md-elevation-1: 0 1px 3px 1px rgba(0,0,0,0.30), 0 1px 2px rgba(0,0,0,0.50);
-    --md-elevation-2: 0 2px 6px 2px rgba(0,0,0,0.30), 0 1px 2px rgba(0,0,0,0.50);
-    --md-elevation-3: 0 4px 8px 3px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.50);
-    --md-elevation-4: 0 6px 10px 4px rgba(0,0,0,0.30), 0 2px 3px rgba(0,0,0,0.50);
-    --md-elevation-5: 0 8px 12px 6px rgba(0,0,0,0.30), 0 4px 4px rgba(0,0,0,0.50);
-  }
-
-  /* Dark mode scrim */
-  .md-scrim { background: rgba(0, 0, 0, 0.75); }
-
-  /* Loading overlay needs darker backdrop */
-  .loading-overlay { background: rgba(28, 27, 31, 0.7); }
-
-  /* Button disabled states for dark */
-  .md-button:disabled {
-    background: rgba(230, 225, 229, 0.12);
-    color: rgba(230, 225, 229, 0.38);
-  }
-  .md-button--outlined:disabled {
-    border-color: rgba(230, 225, 229, 0.12);
-  }
-  .md-icon-button:disabled {
-    color: rgba(230, 225, 229, 0.38);
-  }
-
-  /* Text field label background adapts to dark surface */
-  .md-text-field__label {
-    background: var(--md-surface-container-lowest);
-  }
-  .settings-dialog .md-text-field__label {
-    background: var(--md-surface-container-high);
-  }
-
-  /* Scrollbar dark variant */
-  .result-container::-webkit-scrollbar-thumb {
-    background: var(--md-outline-variant);
-    border-color: var(--md-surface-container-lowest);
-  }
-  .result-container::-webkit-scrollbar-thumb:hover {
-    background: var(--md-outline);
-  }
-
-  /* Upload zone: brighter dashed border for dark mode visibility */
-  .upload-zone {
-    border-color: var(--md-outline);
-  }
-}
-
-/* ===================================================================
-   Reduced Motion (P2-3: accessibility for vestibular disorders)
-   =================================================================== */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

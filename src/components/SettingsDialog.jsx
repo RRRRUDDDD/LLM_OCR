@@ -12,19 +12,14 @@ const DEFAULT_PROMPT =
   '现在请转录图片中的全部文字。';
 
 export const DEFAULT_API_CONFIG = {
-  // P0-1: Gemini Native API — auto-detected by useOcrApi
   baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   apiKey: '',
   model: 'gemini-2.5-flash',
   prompt: DEFAULT_PROMPT,
 };
 
-/**
- * P1-1: Validate baseUrl — must be HTTPS (except localhost for dev).
- * @returns {string|null} Error message or null if valid
- */
 function validateBaseUrl(url) {
-  if (!url) return null; // Will fall back to default
+  if (!url) return null; // 为空则回退到默认值
   const trimmed = url.trim();
   if (!trimmed) return null;
 
@@ -44,10 +39,11 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
   const [form, setForm] = useState(apiConfig);
   const [showApiKey, setShowApiKey] = useState(false);
   const [urlError, setUrlError] = useState(null);
+
   const keyRef = useRef(null);
   const trapRef = useFocusTrap(isOpen);
 
-  // Sync form when opening + focus key input
+  // 打开时同步表单状态 + 聚焦密钥输入框
   useEffect(() => {
     if (isOpen) {
       setForm(apiConfig);
@@ -66,7 +62,6 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
       prompt: form.prompt.trim() || DEFAULT_API_CONFIG.prompt,
     };
 
-    // P1-1: Validate baseUrl before saving
     const urlErr = validateBaseUrl(trimmed.baseUrl);
     if (urlErr) {
       setUrlError(urlErr);
@@ -85,10 +80,8 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
     setUrlError(null);
   }, []);
 
-  // DRY helper for form field updates
   const updateField = useCallback((field) => (e) => {
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
-    // Clear URL error when user edits the URL field
     if (field === 'baseUrl') setUrlError(null);
   }, []);
 
@@ -117,11 +110,13 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
               placeholder=" "
               className={`md-text-field__input ${urlError ? 'md-text-field__input--error' : ''}`}
               id="settings-base-url"
+              aria-describedby={urlError ? 'settings-base-url-error' : undefined}
+              aria-invalid={!!urlError}
             />
             <label htmlFor="settings-base-url" className="md-text-field__label">API 地址</label>
           </div>
           {urlError && (
-            <p className="settings-dialog__helper settings-dialog__helper--error">{urlError}</p>
+            <p id="settings-base-url-error" className="settings-dialog__helper settings-dialog__helper--error" role="alert">{urlError}</p>
           )}
 
           <div className="md-text-field md-text-field--with-trailing">
@@ -135,18 +130,19 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
               id="settings-api-key"
             />
             <label htmlFor="settings-api-key" className="md-text-field__label">API 密钥 *</label>
-            {/* P1-5: Removed tabIndex={-1}, added aria-label */}
+            {/* aria-label */}
             <button
               type="button"
               className="md-text-field__trailing md-icon-button"
               onClick={() => setShowApiKey(!showApiKey)}
               aria-label={showApiKey ? '隐藏密钥' : '显示密钥'}
+              aria-pressed={showApiKey}
             >
               <span className="material-icons-round">{showApiKey ? 'visibility_off' : 'visibility'}</span>
             </button>
           </div>
           {!form.apiKey.trim() && (
-            <p className="settings-dialog__helper settings-dialog__helper--error">必须填写 API 密钥才能使用 OCR 功能</p>
+            <p id="settings-api-key-error" className="settings-dialog__helper settings-dialog__helper--error" role="alert">必须填写 API 密钥才能使用 OCR 功能</p>
           )}
 
           <div className="md-text-field">

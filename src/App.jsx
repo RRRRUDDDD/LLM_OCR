@@ -10,9 +10,9 @@ import ImagePreview from './components/ImagePreview';
 import ResultPanel from './components/ResultPanel';
 import SettingsDialog, { DEFAULT_API_CONFIG } from './components/SettingsDialog';
 import ImageModal from './components/ImageModal';
+import { STATUS_PROCESSING } from './hooks/useOcrApi';
 
 function App() {
-  // API config — persisted in localStorage
   const [apiConfig, setApiConfig] = useState(() => {
     try {
       const saved = localStorage.getItem('ocr-api-config');
@@ -25,25 +25,39 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [pastedUrl, setPastedUrl] = useState('');
 
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ocr-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch { /* ignore */ }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('ocr-theme', theme); } catch { /* ignore */ }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  }, []);
+
   const { visible: snackbarVisible, message: snackbarMessage, type: snackbarType, show: showSnack, dismiss: dismissSnack } = useSnackbar();
   const {
     images, currentIndex, canGoPrev, canGoNext,
     addImages, addSingleImage, prevImage, nextImage, goTo, clearAll,
   } = useImageManager();
   const {
-    results, isLoading, ensureResultSlots,
+    results, statuses, isLoading, ensureResultSlots,
     processFile, processFiles, clearResults, cancelAll,
   } = useOcrApi(apiConfig);
 
-  // Refs for latest values — used by paste handler to avoid stale closures
   const handleSingleFileRef = useRef(null);
 
-  // Auto-open settings if no API key
   useEffect(() => {
     if (!apiConfig.apiKey) setShowSettings(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); 
 
-  // Escape to close dialogs + lock background scroll
   useEffect(() => {
     const anyDialogOpen = showModal || showSettings;
     if (!anyDialogOpen) return;
@@ -64,7 +78,6 @@ function App() {
     };
   }, [showModal, showSettings]);
 
-  // Arrow-key navigation between images (only when no dialog is open)
   useEffect(() => {
     if (images.length <= 1 || showModal || showSettings) return;
 
@@ -85,14 +98,17 @@ function App() {
     return () => document.removeEventListener('keydown', handleArrowKey);
   }, [images.length, showModal, showSettings, canGoPrev, canGoNext, prevImage, nextImage]);
 
-  // Process a single file (paste, URL)
-  // Uses countRef return from addSingleImage — no stale closure on images.length
-  const handleSingleFile = useCallback(async (file) => {
+  const checkApiKey = useCallback(() => {
     if (!apiConfig.apiKey) {
       setShowSettings(true);
       showSnack('请先配置 API 密钥', 'error');
-      return;
+      return false;
     }
+    return true;
+  }, [apiConfig.apiKey, showSnack]);
+
+  const handleSingleFile = useCallback(async (file) => {
+    if (!checkApiKey()) return;
     try {
       const newIndex = addSingleImage(file);
       ensureResultSlots(newIndex + 1);
@@ -101,12 +117,10 @@ function App() {
     } catch (error) {
       console.error('Error processing file:', error);
     }
-  }, [apiConfig.apiKey, addSingleImage, ensureResultSlots, goTo, processFile, showSnack]);
+  }, [checkApiKey, addSingleImage, ensureResultSlots, goTo, processFile]);
 
-  // Keep ref in sync for paste handler
   handleSingleFileRef.current = handleSingleFile;
 
-  // Paste handler — uses ref to always call latest handleSingleFile
   useEffect(() => {
     const handlePaste = async (e) => {
       const tag = document.activeElement?.tagName;
@@ -133,15 +147,10 @@ function App() {
 
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, []); // Stable — uses ref for latest callback
+  }, []); 
 
-  // Process multiple files (upload, drag & drop)
   const handleMultipleFiles = useCallback(async (files) => {
-    if (!apiConfig.apiKey) {
-      setShowSettings(true);
-      showSnack('请先配置 API 密钥', 'error');
-      return;
-    }
+    if (!checkApiKey()) return;
     try {
       const startIndex = addImages(files);
       ensureResultSlots(startIndex + files.length);
@@ -150,9 +159,8 @@ function App() {
     } catch (error) {
       console.error('Error processing files:', error);
     }
-  }, [apiConfig.apiKey, addImages, ensureResultSlots, goTo, processFiles, showSnack]);
+  }, [checkApiKey, addImages, ensureResultSlots, goTo, processFiles]);
 
-  // Save settings — only persist non-default values to allow code-side prompt updates
   const handleSaveSettings = useCallback((config) => {
     setApiConfig(config);
     const toStore = { ...config };
@@ -164,20 +172,17 @@ function App() {
     showSnack('配置已保存');
   }, [showSnack]);
 
-  // Copy current result
   const handleCopyText = useCallback(() => {
     if (results[currentIndex]) {
       navigator.clipboard.writeText(results[currentIndex])
         .then(() => showSnack('已复制到剪贴板'))
-        .catch((err) => console.error('复制失败:', err));
+        .catch(() => showSnack('复制失败，请手动复制', 'error'));
     }
   }, [results, currentIndex, showSnack]);
 
-  // Copy all results (multi-image)
   const handleCopyAll = useCallback(() => {
-    // Check if any image is still processing
     const totalImages = images.length;
-    const pendingCount = results.slice(0, totalImages).filter((r) => !r || r === '').length;
+    const pendingCount = statuses.slice(0, totalImages).filter((s) => s === STATUS_PROCESSING).length;
     if (isLoading || pendingCount > 0) {
       showSnack(`还有 ${Math.max(pendingCount, 1)} 张图片正在识别中，请稍等`, 'error');
       return;
@@ -190,8 +195,8 @@ function App() {
 
     navigator.clipboard.writeText(allText)
       .then(() => showSnack(`已复制全部 ${totalImages} 张图片的识别结果`))
-      .catch((err) => console.error('复制失败:', err));
-  }, [images.length, results, isLoading, showSnack]);
+      .catch(() => showSnack('复制失败，请手动复制', 'error'));
+  }, [images.length, statuses, results, isLoading, showSnack]);
 
   const clearPastedUrl = useCallback(() => setPastedUrl(''), []);
   const openSettings = useCallback(() => setShowSettings(true), []);
@@ -199,7 +204,6 @@ function App() {
   const openModal = useCallback(() => setShowModal(true), []);
   const closeModal = useCallback(() => setShowModal(false), []);
 
-  // P0-2: Clear — cancel in-flight requests first, then clear UI state
   const handleClearAll = useCallback(() => {
     cancelAll();
     clearAll();
@@ -208,11 +212,29 @@ function App() {
 
   return (
     <div className="md-app">
-      {/* Top App Bar */}
+      {/* 顶部应用栏 */}
       <header className="md-top-app-bar">
         <div className="md-top-app-bar__row">
           <span className="material-icons-round md-top-app-bar__nav-icon">document_scanner</span>
           <h1 className="md-top-app-bar__title">LLM OCR</h1>
+          <a
+            className="md-icon-button"
+            href="https://github.com/RRRRUDDDD/LLM_OCR"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub 仓库"
+          >
+            <svg className="github-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+              <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.603-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+          <button
+            className="md-icon-button"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
+          >
+            <span className="material-icons-round">{theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
+          </button>
           <button
             className={`md-icon-button ${!apiConfig.apiKey ? 'md-icon-button--badge' : ''}`}
             onClick={openSettings}
@@ -223,13 +245,13 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* 主内容区 */}
       <main className={`md-main ${images.length > 0 ? 'has-content' : ''}`}>
         {images.length === 0 && (
           <p className="hero-subtitle">上传或拖拽图片即刻识别文字内容</p>
         )}
 
-        {/* Upload card wraps both UploadZone and ImagePreview — matches original layout */}
+        {/* UploadZone 和 ImagePreview */}
         <section className={`upload-card md-card md-elevation-1 ${images.length > 0 ? 'with-image' : ''}`}>
           <UploadZone
             hasImages={images.length > 0}
@@ -262,10 +284,11 @@ function App() {
           totalImages={images.length}
           onCopy={handleCopyText}
           onCopyAll={handleCopyAll}
+          status={statuses[currentIndex]}
         />
       </main>
 
-      {/* Modals */}
+      {/* 弹窗 */}
       <ImageModal
         isOpen={showModal}
         imageSrc={images[currentIndex]}
@@ -279,15 +302,20 @@ function App() {
         onClose={closeSettings}
       />
 
-      {/* Snackbar */}
+      {/* 提示条 */}
       {snackbarVisible && (
-        <div className={`md-snackbar md-elevation-3 ${snackbarType === 'error' ? 'md-snackbar--error' : ''}`} role="status" aria-live="polite">
-          <span className="material-icons-round">
+        <div
+          className={`md-snackbar md-elevation-3 ${snackbarType === 'error' ? 'md-snackbar--error' : ''}`}
+          role={snackbarType === 'error' ? 'alert' : 'status'}
+          aria-live={snackbarType === 'error' ? 'assertive' : 'polite'}
+          aria-atomic="true"
+        >
+          <span className="material-icons-round" aria-hidden="true">
             {snackbarType === 'error' ? 'error' : 'check_circle'}
           </span>
           <span className="md-snackbar__text">{snackbarMessage}</span>
-          <button className="md-icon-button md-snackbar__dismiss" onClick={dismissSnack} aria-label="Dismiss">
-            <span className="material-icons-round">close</span>
+          <button className="md-icon-button md-snackbar__dismiss" onClick={dismissSnack} aria-label="关闭提示">
+            <span className="material-icons-round" aria-hidden="true">close</span>
           </button>
         </div>
       )}

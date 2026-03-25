@@ -1,11 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import fetchImageFromUrl from '../utils/fetchImageFromUrl';
 
-/**
- * Upload zone — drag & drop, file input, URL input.
- * Renders only the inner upload-zone div (no section wrapper).
- * The parent wraps it in upload-card section together with ImagePreview.
- */
 export default function UploadZone({
   hasImages,
   onFilesSelected,
@@ -18,10 +13,8 @@ export default function UploadZone({
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
   const dropZoneRef = useRef(null);
-  // Use ref instead of state to avoid re-registering window listeners on drag
   const isDraggingGlobalRef = useRef(false);
 
-  // Restore paste-URL auto-fill: when App.js detects a pasted URL, pre-fill and show
   useEffect(() => {
     if (pastedUrl) {
       setImageUrl(pastedUrl);
@@ -30,7 +23,6 @@ export default function UploadZone({
     }
   }, [pastedUrl, onPastedUrlConsumed]);
 
-  // Global drag tracking — uses ref to keep deps stable (no re-registration)
   useEffect(() => {
     const handleGlobalDragEnter = (e) => {
       e.preventDefault();
@@ -71,7 +63,7 @@ export default function UploadZone({
       window.removeEventListener('drop', handleGlobalDrop);
       window.removeEventListener('dragover', preventDragDefault);
     };
-  }, []); // Stable — no state dependency
+  }, []); 
 
   const handleDragEnter = useCallback((e) => { e.preventDefault(); e.stopPropagation(); }, []);
   const handleDragOver = useCallback((e) => { e.preventDefault(); e.stopPropagation(); }, []);
@@ -103,7 +95,7 @@ export default function UploadZone({
             const blob = await response.blob();
             return new File([blob], 'image.jpg', { type: blob.type });
           } catch {
-            // Silently skip unreachable URLs in drag & drop
+            // 静默跳过拖拽中无法访问的 URL
             return null;
           }
         }
@@ -120,7 +112,6 @@ export default function UploadZone({
   const handleFileInput = useCallback((e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) onFilesSelected(files);
-    // Reset value so re-selecting the same file triggers onChange again
     e.target.value = '';
   }, [onFilesSelected]);
 
@@ -153,7 +144,14 @@ export default function UploadZone({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      aria-label="图片上传区域"
+      role="region"
     >
+      {isDragging && (
+        <div className="upload-zone__drag-hint" aria-live="assertive" aria-atomic="true">
+          松开以上传图片
+        </div>
+      )}
       {!hasImages && !showUrlInput && (
         <div className="upload-zone__empty">
           <div className="upload-zone__icon-wrapper">
@@ -169,7 +167,7 @@ export default function UploadZone({
           <span className="material-icons-round">upload_file</span>
           <span>{hasImages ? '重新上传' : '上传图片'}</span>
         </label>
-        {/* P1-4: Use className instead of hidden for screen reader accessibility */}
+        {/* 使用 className，保证屏幕阅读器可访问性 */}
         <input id="file-input" type="file" accept="image/*" onChange={handleFileInput} multiple className="sr-only" />
         <button className="md-button md-button--outlined" onClick={() => setShowUrlInput(!showUrlInput)}>
           <span className="material-icons-round">link</span>

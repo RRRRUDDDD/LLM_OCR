@@ -1,45 +1,24 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import compressImage from '../utils/compressImage';
 
-/**
- * Handles OCR API calls with streaming SSE.
- *
- * Supports both OpenAI-compatible and Gemini Native API formats.
- * Auto-detects provider based on baseUrl.
- *
- * Optimizations:
- * - Client-side image compression via Canvas (compressImage)
- * - Per-index rAF IDs to avoid cross-cancellation in batch mode
- * - Sliding-window concurrency (Semaphore) instead of fixed batches
- * - Exponential backoff retry for 429 / 5xx / network errors
- */
-
-/** Max retry attempts for transient errors */
 const MAX_RETRIES = 3;
-/** Base delay in ms for exponential backoff */
 const BASE_DELAY_MS = 1000;
 
-/**
- * Detect if baseUrl points to Gemini Native API (not OpenAI-compatible endpoint).
- * Gemini OpenAI-compatible endpoints contain '/openai' in the path.
- */
 function isGeminiNative(baseUrl) {
   return baseUrl.includes('googleapis.com') && !baseUrl.includes('/openai');
 }
 
-/**
- * Build request URL, headers, and body based on provider.
- * @returns {{ url: string, headers: Record<string, string>, body: string }}
- */
 function buildRequest(apiConfig, base64, mimeType) {
   const { baseUrl, apiKey, model, prompt } = apiConfig;
 
   if (isGeminiNative(baseUrl)) {
-    // Gemini Native: POST {baseUrl}/models/{model}:streamGenerateContent?alt=sse&key={apiKey}
-    const url = `${baseUrl.replace(/\/+$/, '')}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    const url = `${baseUrl.replace(/\/+$/, '')}/models/${model}:streamGenerateContent?alt=sse`;
     return {
       url,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: prompt }] },
         contents: [
@@ -55,7 +34,6 @@ function buildRequest(apiConfig, base64, mimeType) {
     };
   }
 
-  // OpenAI-compatible: POST {baseUrl}/chat/completions
   const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
   return {
     url,
@@ -84,39 +62,23 @@ function buildRequest(apiConfig, base64, mimeType) {
   };
 }
 
-/**
- * Parse a single SSE data line and extract text content.
- * Handles both OpenAI and Gemini Native response formats.
- * Compatible with 'data: {...}' and 'data:{...}' (with or without space).
- *
- * @param {string} line - Raw SSE line
- * @param {boolean} geminiNative - Whether to parse as Gemini Native format
- * @returns {string} Extracted text content, or empty string
- */
 function parseSSELine(line, geminiNative) {
-  // Must start with 'data:'
   if (!line.startsWith('data:')) return '';
 
-  // Extract payload — handle both 'data: {...}' and 'data:{...}'
   const payload = line.slice(line.indexOf(':') + 1).trim();
   if (!payload || payload === '[DONE]') return '';
 
   try {
     const data = JSON.parse(payload);
     if (geminiNative) {
-      // Gemini Native: candidates[0].content.parts[0].text
       return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     }
-    // OpenAI: choices[0].delta.content
     return data.choices?.[0]?.delta?.content || '';
   } catch {
     return '';
   }
 }
 
-/**
- * Abort-aware delay — resolves after `ms` or rejects immediately on abort signal.
- */
 function abortableDelay(ms, signal) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -135,12 +97,6 @@ function abortableDelay(ms, signal) {
   });
 }
 
-/**
- * Fetch with exponential backoff retry.
- * Retries on: 429 (rate limit), 5xx (server error), network TypeError.
- * Respects Retry-After header when present.
- * Retry delays are abort-aware — user can cancel immediately during backoff.
- */
 async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -148,31 +104,28 @@ async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
 
       if (response.ok) return response;
 
-      // Determine if this error is retryable
       const retryable = response.status === 429 || response.status >= 500;
       if (!retryable || attempt === retries) {
         const errText = await response.text();
         throw new Error(`API error: ${response.status} ${errText}`);
       }
 
-      // Calculate delay — respect Retry-After header for 429
       let delay;
       const retryAfter = response.headers.get('Retry-After');
       if (retryAfter && response.status === 429) {
         delay = (parseInt(retryAfter, 10) || 1) * 1000;
       } else {
-        delay = BASE_DELAY_MS * Math.pow(2, attempt); // 1s, 2s, 4s
+        const base = BASE_DELAY_MS * Math.pow(2, attempt); // 1s, 2s, 4s
+        delay = Math.random() * base;
       }
 
       await abortableDelay(delay, options.signal);
     } catch (error) {
-      // AbortError — never retry
       if (error.name === 'AbortError') throw error;
 
-      // Network errors (TypeError from fetch) — retry
       if (error instanceof TypeError && attempt < retries) {
-        const delay = BASE_DELAY_MS * Math.pow(2, attempt);
-        await abortableDelay(delay, options.signal);
+        const base = BASE_DELAY_MS * Math.pow(2, attempt);
+        await abortableDelay(Math.random() * base, options.signal);
         continue;
       }
 
@@ -181,15 +134,21 @@ async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
   }
 }
 
+const STATUS_IDLE = 'idle';
+const STATUS_PROCESSING = 'processing';
+const STATUS_DONE = 'done';
+const STATUS_ERROR = 'error';
+
+export { STATUS_IDLE, STATUS_PROCESSING, STATUS_DONE, STATUS_ERROR };
+
 export default function useOcrApi(apiConfig) {
   const [results, setResults] = useState([]);
+  const [statuses, setStatuses] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const abortControllersRef = useRef(new Map());
-  // Per-index rAF IDs — avoids cross-cancellation when multiple images process in parallel
   const rafIdsRef = useRef(new Map());
   const activeCountRef = useRef(0);
 
-  // P2-1: Cleanup all pending requests and rAFs on unmount
   useEffect(() => {
     const controllers = abortControllersRef.current;
     const rafIds = rafIdsRef.current;
@@ -201,7 +160,6 @@ export default function useOcrApi(apiConfig) {
     };
   }, []);
 
-  // P0-2: Cancel all in-flight requests + pending rAFs
   const cancelAll = useCallback(() => {
     abortControllersRef.current.forEach((c) => c.abort());
     abortControllersRef.current.clear();
@@ -216,38 +174,41 @@ export default function useOcrApi(apiConfig) {
       if (prev.length >= count) return prev;
       return [...prev, ...new Array(count - prev.length).fill('')];
     });
+    setStatuses((prev) => {
+      if (prev.length >= count) return prev;
+      return [...prev, ...new Array(count - prev.length).fill(STATUS_IDLE)];
+    });
   }, []);
 
   const processFile = useCallback(async (file, index) => {
     if (!file || !file.type.startsWith('image/')) return;
     if (!apiConfig.apiKey) return;
 
-    // Abort previous request for this index
     const existing = abortControllersRef.current.get(index);
     if (existing) existing.abort();
 
     const controller = new AbortController();
     abortControllersRef.current.set(index, controller);
 
-    // Track active count for loading state
     activeCountRef.current++;
     setIsLoading(true);
 
-    // Detect provider format
     const geminiNative = isGeminiNative(apiConfig.baseUrl);
 
     try {
-      // Clear previous result for this index
       setResults((prev) => {
         const r = [...prev];
         r[index] = '';
         return r;
       });
+      setStatuses((prev) => {
+        const s = [...prev];
+        s[index] = STATUS_PROCESSING;
+        return s;
+      });
 
-      // Compress image before base64 encoding (skips small files automatically)
       const { base64, mimeType } = await compressImage(file);
 
-      // P0-1: Build provider-specific request
       const { url, headers, body } = buildRequest(apiConfig, base64, mimeType);
 
       const response = await fetchWithRetry(
@@ -260,13 +221,11 @@ export default function useOcrApi(apiConfig) {
         },
       );
 
-      // Stream-aware TextDecoder + line buffer
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
       let lineBuffer = '';
 
-      // Per-index rAF-throttled state update
       let pendingUpdate = false;
       const scheduleUpdate = () => {
         if (pendingUpdate) return;
@@ -288,19 +247,15 @@ export default function useOcrApi(apiConfig) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        // stream: true prevents truncating multi-byte chars at chunk boundaries
         const chunk = decoder.decode(value, { stream: true });
         lineBuffer += chunk;
 
-        // P2-4: Normalize \r\n to \n before splitting
         lineBuffer = lineBuffer.replace(/\r/g, '');
 
-        // Process complete lines only; keep incomplete last line in buffer
         const lines = lineBuffer.split('\n');
         lineBuffer = lines.pop() || '';
 
         for (const line of lines) {
-          // P2-4: Use parseSSELine for compatible parsing (handles 'data:' with/without space)
           const content = parseSSELine(line, geminiNative);
           if (content) {
             fullText += content;
@@ -309,13 +264,13 @@ export default function useOcrApi(apiConfig) {
         }
       }
 
-      // Process any remaining data in buffer
+      lineBuffer += decoder.decode();
+
       if (lineBuffer) {
         const content = parseSSELine(lineBuffer, geminiNative);
         if (content) fullText += content;
       }
 
-      // Final flush — cancel pending rAF for this index, commit last text
       const pendingRafId = rafIdsRef.current.get(index);
       if (pendingRafId != null) {
         cancelAnimationFrame(pendingRafId);
@@ -326,6 +281,11 @@ export default function useOcrApi(apiConfig) {
         r[index] = fullText;
         return r;
       });
+      setStatuses((prev) => {
+        const s = [...prev];
+        s[index] = STATUS_DONE;
+        return s;
+      });
     } catch (error) {
       if (error.name === 'AbortError') return;
       console.error('Error details:', error);
@@ -334,28 +294,28 @@ export default function useOcrApi(apiConfig) {
         r[index] = `识别出错,请重试 (${error.message})`;
         return r;
       });
+      setStatuses((prev) => {
+        const s = [...prev];
+        s[index] = STATUS_ERROR;
+        return s;
+      });
     } finally {
-      // P0-2: Fix race condition — only delete if this controller is still the current one
       if (abortControllersRef.current.get(index) === controller) {
         abortControllersRef.current.delete(index);
       }
-      // Clean up rAF for this index
       const leftoverRaf = rafIdsRef.current.get(index);
       if (leftoverRaf != null) {
         cancelAnimationFrame(leftoverRaf);
         rafIdsRef.current.delete(index);
       }
-      activeCountRef.current--;
+      activeCountRef.current = Math.max(0, activeCountRef.current - 1);
       if (activeCountRef.current === 0) setIsLoading(false);
     }
   }, [apiConfig]);
 
-  // Sliding-window concurrency (Semaphore pattern)
-  // Starts next task as soon as one finishes — no blocking on slowest in batch
   const processFiles = useCallback(async (files, startIndex, maxConcurrent = 5) => {
     if (files.length === 0) return;
 
-    // P2-5: Guard against invalid maxConcurrent
     const concurrency = Math.max(1, maxConcurrent);
     let nextIdx = 0;
     const total = files.length;
@@ -383,10 +343,12 @@ export default function useOcrApi(apiConfig) {
 
   const clearResults = useCallback(() => {
     setResults([]);
+    setStatuses([]);
   }, []);
 
   return {
     results,
+    statuses,
     isLoading,
     ensureResultSlots,
     processFile,

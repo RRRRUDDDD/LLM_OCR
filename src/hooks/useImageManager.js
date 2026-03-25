@@ -1,25 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-/**
- * Manages image list, ObjectURL lifecycle, and current index.
- * Fix #1: ObjectURL memory leak — revokeObjectURL on cleanup.
- * Fix #5: Stale closure — countRef tracks latest count synchronously.
- */
 export default function useImageManager() {
   const [images, setImages] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const objectUrlsRef = useRef([]);
-  // Sync counter ref — always holds the true count, even before React re-renders
   const countRef = useRef(0);
 
-  // Cleanup all ObjectURLs on unmount
+  // 组件卸载时清理所有 ObjectURL
   useEffect(() => {
     return () => {
       objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
-  // Returns the startIndex synchronously via ref (safe for rapid successive calls)
   const addImages = useCallback((files) => {
     const startIndex = countRef.current;
     const urls = files.map((f) => {
@@ -32,7 +25,7 @@ export default function useImageManager() {
     return startIndex;
   }, []);
 
-  // Returns the index of the newly added image
+  // 返回新添加图片的索引
   const addSingleImage = useCallback((file) => {
     const index = countRef.current;
     const url = URL.createObjectURL(file);
@@ -48,7 +41,7 @@ export default function useImageManager() {
   const prevImage = useCallback(() => setCurrentIndex((i) => Math.max(0, i - 1)), []);
 
   const nextImage = useCallback(() => {
-    // Use countRef to read latest count without abusing setImages as a reader
+    // 通过 countRef 读取最新计数，避免将 setImages 用作读取器
     setCurrentIndex((i) => Math.min(countRef.current - 1, i + 1));
   }, []);
 
@@ -56,7 +49,7 @@ export default function useImageManager() {
     setCurrentIndex(index);
   }, []);
 
-  // Revoke all ObjectURLs and reset state
+  // 撤销所有 ObjectURL 并重置状态
   const clearAll = useCallback(() => {
     objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     objectUrlsRef.current = [];

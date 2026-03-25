@@ -2,10 +2,6 @@ import { useEffect, useRef } from 'react';
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-/**
- * Trap keyboard focus inside a dialog while it is open.
- * Returns a ref to attach to the dialog container element.
- */
 export default function useFocusTrap(isOpen) {
   const ref = useRef(null);
 
@@ -15,7 +11,7 @@ export default function useFocusTrap(isOpen) {
     const dialog = ref.current;
     const focusable = () => dialog.querySelectorAll(FOCUSABLE);
 
-    // Focus first focusable element on open
+    // 打开时聚焦第一个可聚焦元素
     const elements = focusable();
     if (elements.length > 0) elements[0].focus();
 

@@ -1,9 +1,5 @@
 import { Component } from 'react';
 
-/**
- * React Error Boundary — catches render errors and displays a fallback UI
- * instead of a white screen. Must be a class component (React limitation).
- */
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -24,7 +20,6 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
-      // P0-3: Use CSS variables instead of hardcoded colors for dark mode support
       return (
         <div style={{
           display: 'flex',

@@ -11,7 +11,7 @@ export default memo(function ImagePreview({
   onClick,
   onClear,
 }) {
-  // Fade transition on image switch
+  // 图片切换时的淡入淡出过渡
   const [fadeClass, setFadeClass] = useState('');
   const prevIndexRef = useRef(currentIndex);
 
@@ -59,8 +59,8 @@ export default memo(function ImagePreview({
           onTransitionEnd={() => setFadeClass('')}
         />
         {isLoading && (
-          <div className="loading-overlay">
-            <div className="md-circular-progress"></div>
+          <div className="loading-overlay" role="status" aria-label="图片识别中">
+            <div className="md-circular-progress" aria-hidden="true"></div>
           </div>
         )}
       </div>

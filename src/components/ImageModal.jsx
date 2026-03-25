@@ -14,12 +14,12 @@ export default memo(function ImageModal({ isOpen, imageSrc, onClose }) {
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="Image preview"
+        aria-label="图片预览"
       >
-        <button className="md-icon-button md-dialog__close" onClick={onClose} aria-label="Close">
+        <button className="md-icon-button md-dialog__close" onClick={onClose} aria-label="关闭">
           <span className="material-icons-round">close</span>
         </button>
-        <img src={imageSrc} alt="Full size preview" />
+        <img src={imageSrc} alt="全尺寸预览" />
       </div>
     </div>
   );

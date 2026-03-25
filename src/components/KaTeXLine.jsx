@@ -1,14 +1,9 @@
 import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 
-// Prevent malformed LaTeX from crashing the entire panel
+// 防止格式错误的 LaTeX 导致整个面板崩溃
 const KATEX_OPTIONS = { throwOnError: false, errorColor: '#B3261E' };
 
-/**
- * Renders a single text line with KaTeX math support.
- * This component is lazy-loaded so that the katex bundle (~330KB)
- * is only fetched when math content ($...$) is actually present.
- */
 export default function KaTeXLine({ line }) {
   return line.split(/(\$\$.*?\$\$|\$.*?\$)/g).map((part, i) => {
     if (part.startsWith('$$') && part.endsWith('$$')) {
