@@ -1,9 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-/**
- * @typedef {'success'|'error'|'info'} SnackbarType
- */
-
 export default function useSnackbar(duration = 2500) {
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState('');

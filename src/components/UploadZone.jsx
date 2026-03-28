@@ -88,14 +88,10 @@ export default function UploadZone({
     const filePromises = items.map(async (item) => {
       if (item.kind === 'string') {
         const url = await new Promise((resolve) => item.getAsString(resolve));
-        if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+        if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || url.startsWith('data:image/')) {
           try {
-            const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-            if (!response.ok) return null;
-            const blob = await response.blob();
-            return new File([blob], 'image.jpg', { type: blob.type });
+            return await fetchImageFromUrl(url);
           } catch {
-            // 静默跳过拖拽中无法访问的 URL
             return null;
           }
         }

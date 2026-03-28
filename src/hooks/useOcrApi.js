@@ -26,6 +26,7 @@ function buildRequest(apiConfig, base64, mimeType) {
             role: 'user',
             parts: [
               { inline_data: { mime_type: mimeType, data: base64 } },
+              { text: '请按照系统指令严格转录上图中的全部文字，直接输出结果，不要任何前言或解释。' },
             ],
           },
         ],
@@ -53,6 +54,10 @@ function buildRequest(apiConfig, base64, mimeType) {
               type: 'image_url',
               image_url: { url: `data:${mimeType};base64,${base64}` },
             },
+            {
+              type: 'text',
+              text: '请按照系统指令严格转录上图中的全部文字，直接输出结果，不要任何前言或解释。',
+            },
           ],
         },
       ],
@@ -62,21 +67,28 @@ function buildRequest(apiConfig, base64, mimeType) {
   };
 }
 
-function parseSSELine(line, geminiNative) {
-  if (!line.startsWith('data:')) return '';
-
-  const payload = line.slice(line.indexOf(':') + 1).trim();
-  if (!payload || payload === '[DONE]') return '';
-
-  try {
-    const data = JSON.parse(payload);
-    if (geminiNative) {
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+function parseSSEChunk(chunk, geminiNative) {
+  // SSE 事件块以空行分隔，每个块可含多行 data:
+  let result = '';
+  const events = chunk.split(/\n\n+/);
+  for (const event of events) {
+    const dataLines = event.split('\n')
+      .filter((l) => l.startsWith('data:'))
+      .map((l) => l.slice(l.indexOf(':') + 1).trim());
+    const payload = dataLines.join('');
+    if (!payload || payload === '[DONE]') continue;
+    try {
+      const data = JSON.parse(payload);
+      if (geminiNative) {
+        result += data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } else {
+        result += data.choices?.[0]?.delta?.content || '';
+      }
+    } catch {
+      // 忽略不完整的 JSON 块（流式传输中的正常情况）
     }
-    return data.choices?.[0]?.delta?.content || '';
-  } catch {
-    return '';
   }
+  return result;
 }
 
 function abortableDelay(ms, signal) {
@@ -107,7 +119,9 @@ async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
       const retryable = response.status === 429 || response.status >= 500;
       if (!retryable || attempt === retries) {
         const errText = await response.text();
-        throw new Error(`API error: ${response.status} ${errText}`);
+        const err = new Error(`API error: ${response.status} ${errText}`);
+        if (response.status === 429) err.isRateLimit = true;
+        throw err;
       }
 
       let delay;
@@ -188,6 +202,7 @@ export default function useOcrApi(apiConfig) {
     if (existing) existing.abort();
 
     const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90_000);
     abortControllersRef.current.set(index, controller);
 
     activeCountRef.current++;
@@ -224,7 +239,7 @@ export default function useOcrApi(apiConfig) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
-      let lineBuffer = '';
+      let chunkBuffer = '';
 
       let pendingUpdate = false;
       const scheduleUpdate = () => {
@@ -247,16 +262,15 @@ export default function useOcrApi(apiConfig) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        lineBuffer += chunk;
+        const raw = decoder.decode(value, { stream: true });
+        chunkBuffer += raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-        lineBuffer = lineBuffer.replace(/\r/g, '');
-
-        const lines = lineBuffer.split('\n');
-        lineBuffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const content = parseSSELine(line, geminiNative);
+        // 按双换行切分完整事件块，保留最后一个可能不完整的块
+        const lastDouble = chunkBuffer.lastIndexOf('\n\n');
+        if (lastDouble !== -1) {
+          const complete = chunkBuffer.slice(0, lastDouble + 2);
+          chunkBuffer = chunkBuffer.slice(lastDouble + 2);
+          const content = parseSSEChunk(complete, geminiNative);
           if (content) {
             fullText += content;
             scheduleUpdate();
@@ -264,10 +278,11 @@ export default function useOcrApi(apiConfig) {
         }
       }
 
-      lineBuffer += decoder.decode();
+      // 处理流结束后缓冲区中剩余的内容
+      chunkBuffer += decoder.decode();
 
-      if (lineBuffer) {
-        const content = parseSSELine(lineBuffer, geminiNative);
+      if (chunkBuffer.trim()) {
+        const content = parseSSEChunk(chunkBuffer, geminiNative);
         if (content) fullText += content;
       }
 
@@ -276,9 +291,14 @@ export default function useOcrApi(apiConfig) {
         cancelAnimationFrame(pendingRafId);
         rafIdsRef.current.delete(index);
       }
+
+      // 若 prompt 要求界定符输出，提取标签内容；否则保留原始输出
+      const ocrMatch = fullText.match(/<ocr_text>([\s\S]*?)<\/ocr_text>/);
+      const finalText = ocrMatch ? ocrMatch[1].trim() : fullText;
+
       setResults((prev) => {
         const r = [...prev];
-        r[index] = fullText;
+        r[index] = finalText;
         return r;
       });
       setStatuses((prev) => {
@@ -300,6 +320,7 @@ export default function useOcrApi(apiConfig) {
         return s;
       });
     } finally {
+      clearTimeout(timeoutId);
       if (abortControllersRef.current.get(index) === controller) {
         abortControllersRef.current.delete(index);
       }
@@ -316,7 +337,7 @@ export default function useOcrApi(apiConfig) {
   const processFiles = useCallback(async (files, startIndex, maxConcurrent = 5) => {
     if (files.length === 0) return;
 
-    const concurrency = Math.max(1, maxConcurrent);
+    let concurrency = Math.max(1, Math.min(maxConcurrent, files.length));
     let nextIdx = 0;
     const total = files.length;
 
@@ -326,14 +347,22 @@ export default function useOcrApi(apiConfig) {
       const startNext = () => {
         while (nextIdx < total && (nextIdx - completed) < concurrency) {
           const i = nextIdx++;
-          processFile(files[i], startIndex + i).catch(() => {}).then(() => {
-            completed++;
-            if (completed === total) {
-              resolveAll();
-            } else {
-              startNext();
-            }
-          });
+          processFile(files[i], startIndex + i).then(
+            () => {
+              completed++;
+              if (concurrency < maxConcurrent) concurrency = Math.min(maxConcurrent, concurrency + 1);
+              if (completed === total) resolveAll();
+              else startNext();
+            },
+            (err) => {
+              if (err?.isRateLimit) {
+                concurrency = Math.max(1, Math.floor(concurrency / 2));
+              }
+              completed++;
+              if (completed === total) resolveAll();
+              else startNext();
+            },
+          );
         }
       };
 

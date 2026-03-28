@@ -9,6 +9,7 @@ const DEFAULT_PROMPT =
   '3. **原样排版**：严格保留原文的换行、空行、缩进、段落间距、编号层级和标点符号。输出的视觉结构必须与原图一致。\n' +
   '4. **逐字忠实**：不纠正错别字、不润色措辞、不调整语序。原文写错了也照抄。\n' +
   '5. **无法识别**：遇到污损、模糊、遮挡导致完全无法辨认的字词，用 [?] 占位，不要猜测。\n\n' +
+  '6. **输出格式**：将转录结果完整放置在 <ocr_text> 与 </ocr_text> 标签之间，标签外不输出任何内容。\n' +
   '现在请转录图片中的全部文字。';
 
 export const DEFAULT_API_CONFIG = {
@@ -59,7 +60,7 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
       baseUrl: form.baseUrl.trim() || DEFAULT_API_CONFIG.baseUrl,
       apiKey: form.apiKey.trim(),
       model: form.model.trim() || DEFAULT_API_CONFIG.model,
-      prompt: form.prompt.trim() || DEFAULT_API_CONFIG.prompt,
+      prompt: form.prompt.trimEnd() || DEFAULT_API_CONFIG.prompt,
     };
 
     const urlErr = validateBaseUrl(trimmed.baseUrl);
