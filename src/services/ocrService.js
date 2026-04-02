@@ -72,7 +72,7 @@ function buildRequest(apiConfig, base64, mimeType) {
             { text: prompt.includes('转录') ? '请按照系统指令严格转录上图中的全部文字，直接输出结果。' : 'Transcribe all text in the image following the system instructions.' },
           ],
         }],
-        generationConfig: { temperature: 0, maxOutputTokens: 8192 },
+        generationConfig: { temperature: 0, maxOutputTokens: 16384 },
       }),
     };
   }
@@ -99,7 +99,7 @@ function buildRequest(apiConfig, base64, mimeType) {
         },
       ],
       temperature: 0,
-      max_tokens: 8192,
+      max_tokens: 16384,
     }),
   };
 }
