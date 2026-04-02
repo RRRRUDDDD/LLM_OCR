@@ -1,8 +1,16 @@
 import { memo, lazy, Suspense, useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 const KaTeXLine = lazy(() => import('./KaTeXLine'));
 
+/**
+ * Streaming mode: render line-by-line (plain text + inline KaTeX)
+ */
 const TextLine = memo(function TextLine({ line, index, isStreaming }) {
   const hasMath = line.includes('$');
   return (
@@ -19,8 +27,23 @@ const TextLine = memo(function TextLine({ line, index, isStreaming }) {
 });
 
 /**
+ * Completed mode: full Markdown rendering with GFM tables, math, etc.
+ */
+const MarkdownResult = memo(function MarkdownResult({ content }) {
+  return (
+    <div className="markdown-result">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+});
+
+/**
  * Dropdown menu that appears below a button.
- * Closes on outside click or Escape.
  */
 function DropdownMenu({ items, onClose }) {
   const menuRef = useRef(null);
@@ -120,8 +143,10 @@ export default function ResultPanel({
   const hasResult = result && result.length > 0;
   const showPanel = hasResult || isLoading;
   const isStreaming = isLoading || status === 'processing';
-  const lines = useMemo(() => (hasResult ? result.split('\n') : []), [result]);
   const isDone = status === 'done';
+
+  // For streaming mode: split into lines
+  const lines = useMemo(() => (hasResult ? result.split('\n') : []), [result]);
 
   const singleExportItems = useMemo(() => {
     if (!onExport || !isDone) return null;
@@ -187,11 +212,17 @@ export default function ResultPanel({
               </div>
             </div>
             <div className="result-body">
-              <div className={`streaming-text ${isLoading ? 'is-streaming' : ''}`}>
-                {lines.map((line, index) => (
-                  <TextLine key={index} line={line} index={index} isStreaming={isStreaming} />
-                ))}
-              </div>
+              {isStreaming ? (
+                /* Streaming: line-by-line plain text for smooth incremental display */
+                <div className="streaming-text is-streaming">
+                  {lines.map((line, index) => (
+                    <TextLine key={index} line={line} index={index} isStreaming={isStreaming} />
+                  ))}
+                </div>
+              ) : (
+                /* Completed: full Markdown rendering with tables, math, etc. */
+                <MarkdownResult content={result} />
+              )}
             </div>
           </div>
         )}

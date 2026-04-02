@@ -144,6 +144,95 @@
   font-size: 14px;
 }
 
+/* ── Markdown Result Rendering ── */
+
+.markdown-result {
+  line-height: 1.7;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.markdown-result h1,
+.markdown-result h2,
+.markdown-result h3 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+}
+
+.markdown-result p {
+  margin: 0.5em 0;
+}
+
+.markdown-result table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.8em 0;
+  font-size: 13px;
+  overflow-x: auto;
+  display: block;
+}
+
+.markdown-result th,
+.markdown-result td {
+  border: 1px solid var(--md-outline-variant, #CAC4D0);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.markdown-result th {
+  background: var(--md-surface-container-high, #ECE6F0);
+  font-weight: 600;
+}
+
+.markdown-result tr:nth-child(even) {
+  background: var(--md-surface-container-lowest, #FFFFFF);
+}
+
+.markdown-result code {
+  background: var(--md-surface-container, #F3EDF7);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.markdown-result pre {
+  background: var(--md-surface-container, #F3EDF7);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.markdown-result pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-result blockquote {
+  border-left: 3px solid var(--md-outline, #79747E);
+  margin: 0.5em 0;
+  padding-left: 12px;
+  color: var(--md-on-surface-variant, #49454F);
+}
+
+.markdown-result ul,
+.markdown-result ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.markdown-result img {
+  max-width: 100%;
+}
+
+[data-theme="dark"] .markdown-result th {
+  background: var(--md-surface-container-high, #2B2930);
+}
+
+[data-theme="dark"] .markdown-result tr:nth-child(even) {
+  background: var(--md-surface-container-lowest, #0F0D13);
+}
+
 /* ── Button with Dropdown (Split Button) ── */
 
 .button-with-dropdown {
