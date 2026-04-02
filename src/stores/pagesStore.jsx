@@ -248,14 +248,23 @@ export function usePages() {
       const saved = await db.getAllImages();
       const loadedPages = saved.map((img) => ({
         ...img,
-        imageUrl: '', // Will be populated from blob on demand
+        imageUrl: '', // Will be populated from blob below
         status: img.status || PAGE_STATUS.IDLE,
         ocrText: img.ocrText || '',
       }));
       dispatch({ type: 'SET_PAGES', pages: loadedPages });
 
-      // Load OCR results for completed pages
+      // Restore image URLs and OCR results for all pages
       for (const page of loadedPages) {
+        // Load image blob -> create objectURL
+        const blob = await db.getImageBlob(page.id);
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          objectUrlsRef.current.set(page.id, url);
+          dispatch({ type: 'UPDATE_PAGE', id: page.id, updates: { imageUrl: url } });
+        }
+
+        // Load OCR result
         const result = await db.getOcrResult(page.id);
         if (result?.text) {
           dispatch({
