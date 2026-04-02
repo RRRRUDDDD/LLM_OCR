@@ -15,8 +15,6 @@
 - **IndexedDB 持久化** — OCR 结果通过 Dexie.js 存入浏览器数据库，刷新页面不丢失，兼容 WebKit/Safari
 - **EXIF 方向修正** — 自动检测并修正手机拍照的旋转方向
 - **逐图状态追踪** — 缩略图条显示每张图片的独立状态徽章（排队中 / 处理中 / 完成 / 错误）
-- **健康指示器** — 顶栏实时显示 API 连接状态
-- **队列状态** — 显示当前活跃和等待中的任务数量
 - **LaTeX 公式渲染** — 识别结果中的数学公式通过 KaTeX 实时渲染
 - **客户端图片压缩** — Web Worker + OffscreenCanvas 后台压缩，不阻塞主线程；不支持时自动回退
 
@@ -37,8 +35,6 @@ https://ocr.yoshinagakoi.eu.org/
 | PDF 处理 | pdfjs-dist | PDF 页面提取 |
 | 文档导出 | docx, file-saver | Word 文档生成与下载 |
 | 数学渲染 | KaTeX | LaTeX 公式渲染 |
-| 日志 | consola | 带标签的结构化日志 |
-| E2E 测试 | Playwright | 端到端测试框架 |
 
 ## 项目结构
 
