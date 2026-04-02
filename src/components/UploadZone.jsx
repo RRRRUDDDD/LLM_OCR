@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import fetchImageFromUrl from '../utils/fetchImageFromUrl';
+import { uiLogger } from '../utils/logger';
 
 export default function UploadZone({
   hasImages,
@@ -121,7 +122,7 @@ export default function UploadZone({
       setShowUrlInput(false);
       setImageUrl('');
     } catch (error) {
-      console.error('Error loading image:', error);
+      uiLogger.error('Error loading image:', error);
       let msg = '无法加载图片，';
       if (error.name === 'AbortError') msg += '请求超时，请检查网络连接。';
       else if (error.message.includes('CORS')) msg += '该图片可能有访问限制。';
@@ -154,7 +155,7 @@ export default function UploadZone({
             <span className="material-icons-round">cloud_upload</span>
           </div>
           <p className="upload-zone__title">拖拽或粘贴图片到此处</p>
-          <p className="upload-zone__subtitle">支持 JPG / PNG / GIF / WebP 格式</p>
+          <p className="upload-zone__subtitle">支持 JPG / PNG / GIF / WebP / PDF 格式</p>
         </div>
       )}
 
@@ -164,7 +165,7 @@ export default function UploadZone({
           <span>{hasImages ? '重新上传' : '上传图片'}</span>
         </label>
         {/* 使用 className，保证屏幕阅读器可访问性 */}
-        <input id="file-input" type="file" accept="image/*" onChange={handleFileInput} multiple className="sr-only" />
+        <input id="file-input" type="file" accept="image/*,.pdf,application/pdf" onChange={handleFileInput} multiple className="sr-only" />
         <button className="md-button md-button--outlined" onClick={() => setShowUrlInput(!showUrlInput)}>
           <span className="material-icons-round">link</span>
           <span>{showUrlInput ? '取消' : '使用链接'}</span>

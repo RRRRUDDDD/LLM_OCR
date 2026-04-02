@@ -152,15 +152,36 @@ function compressOnMainThread(file, opts = {}) {
   });
 }
 
+// Hoist EXIF fix import to module level (cached after first load)
+let _fixExifOrientation = null;
+const exifFixPromise = import('./exifFix').then((m) => {
+  _fixExifOrientation = m.fixExifOrientation;
+}).catch(() => {
+  // EXIF module unavailable, proceed without
+});
+
 export default async function compressImage(file, opts = {}) {
-  const workerResult = compressViaWorker(file, opts);
+  // Fix EXIF orientation before compression (mobile photos may be rotated)
+  let inputFile = file;
+  await exifFixPromise; // Ensure module is loaded (no-op after first call)
+  if (_fixExifOrientation) {
+    try {
+      const fixed = await _fixExifOrientation(file);
+      if (fixed !== file) {
+        inputFile = new File([fixed], file.name || 'image.jpg', { type: fixed.type || file.type });
+      }
+    } catch {
+      // EXIF fix failed (e.g. non-JPEG), proceed with original
+    }
+  }
+
+  const workerResult = compressViaWorker(inputFile, opts);
   if (workerResult) {
     try {
       return await workerResult;
     } catch {
-      // Worker 失败时回退主线程
-      return compressOnMainThread(file, opts);
+      return compressOnMainThread(inputFile, opts);
     }
   }
-  return compressOnMainThread(file, opts);
+  return compressOnMainThread(inputFile, opts);
 }

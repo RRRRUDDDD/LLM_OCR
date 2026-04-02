@@ -1312,3 +1312,87 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Page Thumbnails Strip ── */
+.page-thumbnails-strip {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--md-outline, #ccc);
+  scrollbar-width: thin;
+}
+
+.page-thumbnails-strip::-webkit-scrollbar {
+  height: 4px;
+}
+
+.page-thumbnails-strip::-webkit-scrollbar-thumb {
+  background: var(--md-outline, #ccc);
+  border-radius: 2px;
+}
+
+/* ── Export Actions Card ── */
+.export-actions {
+  padding: 12px 16px;
+  margin-top: 12px;
+}
+
+.export-actions__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant, #666);
+  margin-bottom: 8px;
+}
+
+.export-actions__header .material-icons-round {
+  font-size: 18px;
+}
+
+.export-actions__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.export-actions__buttons .md-button {
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+.export-actions__buttons .md-button .material-icons-round {
+  font-size: 16px;
+}
+
+/* ── Tonal Button Variant ── */
+.md-button--tonal {
+  background: var(--md-primary-container, #EADDFF);
+  color: var(--md-on-primary-container, #21005D);
+  border: none;
+  cursor: pointer;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.md-button--tonal:hover {
+  filter: brightness(0.95);
+}
+
+[data-theme="dark"] .md-button--tonal {
+  background: var(--md-primary-container, #4A4458);
+  color: var(--md-on-primary-container, #EADDFF);
+}
+
+/* ── Settings Overlay (for Playwright locator) ── */
+.md-scrim {
+  /* already defined above, adding class alias */
+}
+.settings-overlay { /* alias */ }
+.md-scrim { position: fixed; inset: 0; }
+

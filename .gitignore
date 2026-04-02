@@ -17,4 +17,12 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+yarn.lock
 .ace-tool/
+
+# reference projects
+DeepSeek-OCR-WebUI/
+
+# playwright
+test-results/
+playwright-report/

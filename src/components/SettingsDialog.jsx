@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import useFocusTrap from '../hooks/useFocusTrap';
 
 const DEFAULT_PROMPT =
@@ -13,30 +14,28 @@ const DEFAULT_PROMPT =
   '现在请转录图片中的全部文字。';
 
 export const DEFAULT_API_CONFIG = {
-  baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+  baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
-  model: 'gemini-2.5-flash',
+  model: 'gpt-4o',
   prompt: DEFAULT_PROMPT,
 };
 
 function validateBaseUrl(url) {
-  if (!url) return null; // 为空则回退到默认值
+  if (!url) return null;
   const trimmed = url.trim();
   if (!trimmed) return null;
-
   try {
     const parsed = new URL(trimmed);
     const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-    if (!isLocalhost && parsed.protocol !== 'https:') {
-      return 'API 地址必须使用 HTTPS 协议';
-    }
+    if (!isLocalhost && parsed.protocol !== 'https:') return 'settings.urlHttpsRequired';
   } catch {
-    return 'API 地址格式不正确';
+    return 'settings.urlInvalid';
   }
   return null;
 }
 
 export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState(apiConfig);
   const [showApiKey, setShowApiKey] = useState(false);
   const [urlError, setUrlError] = useState(null);
@@ -44,7 +43,6 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
   const keyRef = useRef(null);
   const trapRef = useFocusTrap(isOpen);
 
-  // 打开时同步表单状态 + 聚焦密钥输入框
   useEffect(() => {
     if (isOpen) {
       setForm(apiConfig);
@@ -64,15 +62,8 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
     };
 
     const urlErr = validateBaseUrl(trimmed.baseUrl);
-    if (urlErr) {
-      setUrlError(urlErr);
-      return;
-    }
-
-    if (!trimmed.apiKey) {
-      keyRef.current?.focus();
-      return;
-    }
+    if (urlErr) { setUrlError(urlErr); return; }
+    if (!trimmed.apiKey) { keyRef.current?.focus(); return; }
     onSave(trimmed);
   }, [form, onSave]);
 
@@ -89,7 +80,7 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="md-scrim" onClick={onClose} role="presentation">
+    <div className="md-scrim settings-overlay" onClick={onClose} role="presentation">
       <form
         ref={trapRef}
         className="settings-dialog md-elevation-5"
@@ -99,8 +90,8 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
         aria-modal="true"
         aria-labelledby="settings-title"
       >
-        <h2 className="settings-dialog__title" id="settings-title">API 配置</h2>
-        <p className="settings-dialog__desc">配置保存在浏览器本地，刷新页面不会丢失</p>
+        <h2 className="settings-dialog__title" id="settings-title">{t('settings.title')}</h2>
+        <p className="settings-dialog__desc">{t('settings.storedLocally', 'Settings are stored in your browser and persist across refreshes')}</p>
 
         <div className="settings-dialog__form">
           <div className="md-text-field">
@@ -114,10 +105,12 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
               aria-describedby={urlError ? 'settings-base-url-error' : undefined}
               aria-invalid={!!urlError}
             />
-            <label htmlFor="settings-base-url" className="md-text-field__label">API 地址</label>
+            <label htmlFor="settings-base-url" className="md-text-field__label">{t('settings.baseUrl')}</label>
           </div>
           {urlError && (
-            <p id="settings-base-url-error" className="settings-dialog__helper settings-dialog__helper--error" role="alert">{urlError}</p>
+            <p id="settings-base-url-error" className="settings-dialog__helper settings-dialog__helper--error" role="alert">
+              {t(urlError)}
+            </p>
           )}
 
           <div className="md-text-field md-text-field--with-trailing">
@@ -130,20 +123,21 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
               className={`md-text-field__input ${!form.apiKey.trim() ? 'md-text-field__input--error' : ''}`}
               id="settings-api-key"
             />
-            <label htmlFor="settings-api-key" className="md-text-field__label">API 密钥 *</label>
-            {/* aria-label */}
+            <label htmlFor="settings-api-key" className="md-text-field__label">{t('settings.apiKey')} *</label>
             <button
               type="button"
               className="md-text-field__trailing md-icon-button"
               onClick={() => setShowApiKey(!showApiKey)}
-              aria-label={showApiKey ? '隐藏密钥' : '显示密钥'}
+              aria-label={showApiKey ? t('settings.hideKey', 'Hide key') : t('settings.showKey', 'Show key')}
               aria-pressed={showApiKey}
             >
               <span className="material-icons-round">{showApiKey ? 'visibility_off' : 'visibility'}</span>
             </button>
           </div>
           {!form.apiKey.trim() && (
-            <p id="settings-api-key-error" className="settings-dialog__helper settings-dialog__helper--error" role="alert">必须填写 API 密钥才能使用 OCR 功能</p>
+            <p id="settings-api-key-error" className="settings-dialog__helper settings-dialog__helper--error" role="alert">
+              {t('settings.apiKeyRequired')}
+            </p>
           )}
 
           <div className="md-text-field">
@@ -155,7 +149,7 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
               className="md-text-field__input"
               id="settings-model"
             />
-            <label htmlFor="settings-model" className="md-text-field__label">模型名称</label>
+            <label htmlFor="settings-model" className="md-text-field__label">{t('settings.model')}</label>
           </div>
 
           <div className="md-text-field md-text-field--textarea">
@@ -167,20 +161,20 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }) {
               id="settings-prompt"
               rows={4}
             />
-            <label htmlFor="settings-prompt" className="md-text-field__label">自定义 Prompt</label>
+            <label htmlFor="settings-prompt" className="md-text-field__label">{t('settings.prompt')}</label>
           </div>
         </div>
 
         <div className="settings-dialog__actions">
           <button type="button" className="md-button md-button--text" onClick={handleReset}>
-            恢复默认
+            {t('settings.reset', 'Reset')}
           </button>
           <div style={{ flex: 1 }} />
           <button type="button" className="md-button md-button--text" onClick={onClose}>
-            取消
+            {t('settings.cancel', 'Cancel')}
           </button>
           <button type="submit" className="md-button md-button--filled" disabled={!form.apiKey.trim()}>
-            保存
+            {t('settings.save')}
           </button>
         </div>
       </form>

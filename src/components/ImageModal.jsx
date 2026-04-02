@@ -1,7 +1,9 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import useFocusTrap from '../hooks/useFocusTrap';
 
 export default memo(function ImageModal({ isOpen, imageSrc, onClose }) {
+  const { t } = useTranslation();
   const trapRef = useFocusTrap(isOpen);
 
   if (!isOpen) return null;
@@ -14,12 +16,12 @@ export default memo(function ImageModal({ isOpen, imageSrc, onClose }) {
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="图片预览"
+        aria-label={t('modal.imagePreview', 'Image Preview')}
       >
-        <button className="md-icon-button md-dialog__close" onClick={onClose} aria-label="关闭">
+        <button className="md-icon-button md-dialog__close" onClick={onClose} aria-label={t('modal.close', 'Close')}>
           <span className="material-icons-round">close</span>
         </button>
-        <img src={imageSrc} alt="全尺寸预览" />
+        <img src={imageSrc} alt={t('modal.fullSizePreview', 'Full size preview')} />
       </div>
     </div>
   );
