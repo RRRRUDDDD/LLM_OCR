@@ -13,14 +13,17 @@ const lazyPdf = () => import('./services/pdfService');
 const lazyExport = () => import('./services/exportService');
 const lazyDocx = () => import('./services/docxService');
 
+// Inline PDF check — avoids loading pdfjs-dist just to check file type
+function isPdfFile(file) {
+  return file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
+}
+
 import useSnackbar from './hooks/useSnackbar';
 import UploadZone from './components/UploadZone';
 import ImagePreview from './components/ImagePreview';
 import ResultPanel from './components/ResultPanel';
 import SettingsDialog, { DEFAULT_API_CONFIG } from './components/SettingsDialog';
 import ImageModal from './components/ImageModal';
-import HealthIndicator from './components/HealthIndicator';
-import QueueStatus from './components/QueueStatus';
 import PageThumbnail from './components/PageThumbnail';
 
 function App() {
@@ -128,8 +131,8 @@ function App() {
     if (!checkApiKey()) return;
     await fileAdditionQueue.enqueue(async () => {
       try {
-        const { isPdf, extractPdfPages } = await lazyPdf();
-        if (isPdf(file)) {
+        if (isPdfFile(file)) {
+          const { extractPdfPages } = await lazyPdf();
           const pdfPages = await extractPdfPages(file);
           for (const pdfPage of pdfPages) {
             const page = await addPage(new File([pdfPage.blob], pdfPage.id + '.png', { type: 'image/png' }));
@@ -143,9 +146,10 @@ function App() {
         }
       } catch (error) {
         uiLogger.error('Error processing file:', error);
+        showSnack(String(error?.message || 'Failed to process file'), 'error');
       }
     });
-  }, [checkApiKey, addPage, selectPage]);
+  }, [checkApiKey, addPage, selectPage, showSnack]);
 
   // Ref trick for paste handler
   const handleSingleFileRef = useRef(handleSingleFile);
@@ -179,9 +183,9 @@ function App() {
     if (!checkApiKey()) return;
     await fileAdditionQueue.enqueue(async () => {
       try {
-        const { isPdf, extractPdfPages } = await lazyPdf();
         for (const file of files) {
-          if (isPdf(file)) {
+          if (isPdfFile(file)) {
+            const { extractPdfPages } = await lazyPdf();
             const pdfPages = await extractPdfPages(file);
             for (const pdfPage of pdfPages) {
               const page = await addPage(new File([pdfPage.blob], pdfPage.id + '.png', { type: 'image/png' }));
@@ -196,9 +200,10 @@ function App() {
         }
       } catch (error) {
         uiLogger.error('Error processing files:', error);
+        showSnack(String(error?.message || 'Failed to process files'), 'error');
       }
     });
-  }, [checkApiKey, addPage, selectPage, selectedPageId]);
+  }, [checkApiKey, addPage, selectPage, selectedPageId, showSnack]);
 
   const handleSaveSettings = useCallback((config) => {
     setApiConfig(config);
@@ -295,9 +300,6 @@ function App() {
         <div className="md-top-app-bar__row">
           <span className="material-icons-round md-top-app-bar__nav-icon">document_scanner</span>
           <h1 className="md-top-app-bar__title">LLM OCR</h1>
-
-          <HealthIndicator />
-          <QueueStatus />
 
           <a
             className="md-icon-button"
