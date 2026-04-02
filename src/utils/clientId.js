@@ -4,11 +4,9 @@ function generateClientId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  // Fallback for older browsers
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
     const arr = new Uint8Array(16);
     crypto.getRandomValues(arr);
-    // Format as UUID v4
     arr[6] = (arr[6] & 0x0f) | 0x40;
     arr[8] = (arr[8] & 0x3f) | 0x80;
     const hex = Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
@@ -19,7 +17,7 @@ function generateClientId() {
 
 let _clientId = null;
 
- function getClientId() {
+export function getClientId() {
   if (_clientId) return _clientId;
   try {
     _clientId = localStorage.getItem(STORAGE_KEY);
