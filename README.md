@@ -194,3 +194,6 @@ vercel --prod
 ## 许可证
 
 MIT
+
+## 致谢
+本项目已在 [Linux do](https://linux.do/) 社区 发布，感谢社区的支持与反馈。
