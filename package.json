@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
@@ -20,7 +21,6 @@
     "mitt": "^3.0.1",
     "p-queue": "^9.1.1",
     "pdfjs-dist": "^5.6.205",
-    "prop-types": "^15.8.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-i18next": "^17.0.2",
@@ -32,7 +32,11 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
+    "@types/node": "^25.5.2",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^6.0.2",
     "vite": "^6.2.0"
   }
 }
