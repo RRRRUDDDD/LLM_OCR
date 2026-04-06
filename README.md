@@ -5,7 +5,7 @@
 ## 特性
 
 - **LLM 驱动识别** — 使用多模态大模型进行文字识别，非传统 OCR 引擎
-- **流式实时输出** — 通过 SSE 流式返回识别A结果，逐字显示
+- **流式实时输出** — 通过 SSE 流式返回识别结果，逐字显示
 - **多图批量处理** — 支持同时上传多张图片，基于 p-queue 任务队列自动管理并发
 - **PDF 支持** — 上传 PDF 文件后自动逐页提取，每页独立处理
 - **智能重试** — 429 / 5xx / 网络错误自动指数退避重试，尊重 `Retry-After` 响应头
@@ -40,56 +40,60 @@ https://ocr.yoshinagakoi.eu.org/
 
 ```
 src/
-+-- index.jsx                    # 入口
-+-- App.jsx                      # 主组件
++-- index.tsx                    # 入口
++-- App.tsx                      # 主组件
 +-- App.css                      # 全局样式与主题变量
-+-- bootstrap.js                 # 服务连接
++-- bootstrap.ts                 # 服务连接
 +-- stores/
-|   +-- pagesStore.jsx           # 页面状态
+|   +-- pagesStore.tsx           # 页面状态
 +-- db/
-|   +-- index.js                 # Dexie.js IndexedDB
+|   +-- index.ts                 # Dexie.js IndexedDB
 +-- events/
-|   +-- ocrEvents.js             # 事件总线，OCR 生命周期事件
+|   +-- ocrEvents.ts             # 事件总线，OCR 生命周期事件
 +-- services/
-|   +-- ocrService.js            # OCR 处理
-|   +-- queueManager.js          # p-queue 任务队列 + AbortController
-|   +-- healthCheck.js           # API 健康状态追踪
-|   +-- pdfService.js            # PDF 页面提取
-|   +-- exportService.js         # Markdown / 纯文本导出
-|   +-- docxService.js           # Word 文档导出
+|   +-- ocrService.ts            # OCR 处理
+|   +-- queueManager.ts          # p-queue 任务队列 + AbortController
+|   +-- healthCheck.ts           # API 健康状态追踪
+|   +-- pdfService.ts            # PDF 页面提取
+|   +-- exportService.ts         # Markdown / 纯文本导出
+|   +-- docxService.ts           # Word 文档导出
 +-- components/
-|   +-- UploadZone.jsx           # 上传区
-|   +-- ImagePreview.jsx         # 图片预览与导航
-|   +-- ImageModal.jsx           # 图片大图弹窗
-|   +-- ResultPanel.jsx          # 识别结果 + 复制/导出下拉菜单
-|   +-- SettingsDialog.jsx       # API 配置弹窗
-|   +-- PageThumbnail.jsx        # 带状态徽章的缩略图
-|   +-- HealthIndicator.jsx      # 顶栏健康状态指示器
-|   +-- QueueStatus.jsx          # 队列任务计数器
-|   +-- KaTeXLine.jsx            # LaTeX 行渲染器
-|   +-- ErrorBoundary.jsx        # React 错误边界
+|   +-- UploadZone.tsx           # 上传区
+|   +-- ImagePreview.tsx         # 图片预览与导航
+|   +-- ImageModal.tsx           # 图片大图弹窗
+|   +-- ResultPanel.tsx          # 识别结果 + 复制/导出下拉菜单
+|   +-- SettingsDialog.tsx       # API 配置弹窗
+|   +-- PageThumbnail.tsx        # 带状态徽章的缩略图
+|   +-- HealthIndicator.tsx      # 顶栏健康状态指示器
+|   +-- QueueStatus.tsx          # 队列任务计数器
+|   +-- KaTeXLine.tsx            # LaTeX 行渲染器
+|   +-- ErrorBoundary.tsx        # React 错误边界
 +-- hooks/
-|   +-- useSnackbar.js           # 消息提示 hook
-|   +-- useFocusTrap.js          # 弹窗焦点陷阱 hook
+|   +-- useSnackbar.ts           # 消息提示 hook
+|   +-- useFocusTrap.ts          # 弹窗焦点陷阱 hook
 +-- utils/
-|   +-- compressImage.js         # 图片压缩
-|   +-- compressWorker.js        # Web Worker 压缩脚本
-|   +-- fetchImageFromUrl.js     # URL 图片加载
-|   +-- clientId.js              # 持久化客户端 UUID
-|   +-- exifFix.js               # EXIF 方向自动修正
-|   +-- browser.js               # 浏览器检测
-|   +-- fileAdditionQueue.js     # 文件添加序列化
-|   +-- logger.js                # consola 带标签日志
+|   +-- compressImage.ts         # 图片压缩
+|   +-- compressWorker.ts        # Web Worker 压缩脚本
+|   +-- fetchImageFromUrl.ts     # URL 图片加载
+|   +-- clientId.ts              # 持久化客户端 UUID
+|   +-- exifFix.ts               # EXIF 方向自动修正
+|   +-- browser.ts               # 浏览器检测
+|   +-- fileAdditionQueue.ts     # 文件添加序列化
+|   +-- logger.ts                # consola 带标签日志
++-- types/
+|   +-- *.ts / *.d.ts            # API、页面、队列、事件等类型定义
 +-- i18n/
-    +-- index.js                 # i18next 初始化 + 语言自动检测
+    +-- index.ts                 # i18next 初始化 + 语言自动检测
     +-- locales/
-        +-- zh-CN.js             # 中文翻译
-        +-- en.js                # 英文翻译
+        +-- zh-CN.ts             # 中文翻译
+        +-- en.ts                # 英文翻译
 tests/
 +-- e2e/
-    +-- fixtures/base-test.js    # Playwright 基础 fixture
-    +-- pages/AppPage.js         # Page Object Model
-    +-- specs/app.spec.js        # 核心 UI 测试
+    +-- fixtures/base-test.ts    # Playwright 基础 fixture
+    +-- pages/AppPage.ts         # Page Object Model
+    +-- specs/app.spec.ts        # 核心 UI 测试
+    +-- specs/bootstrap.spec.ts  # 启动与恢复测试
+    +-- specs/compress.spec.ts   # 大图压缩回归测试
 ```
 
 ## 快速开始
@@ -104,12 +108,18 @@ npm run dev
 # 生产构建
 npm run build
 
+# 类型检查
+npm run typecheck
+
 # 预览构建产物
 npm run preview
 
 # 运行 E2E 测试
 npx playwright install
 npm run test:e2e
+
+# 打开 Playwright UI
+npm run test:e2e:ui
 ```
 
 打开应用后，点击右上角设置图标配置 API 密钥即可使用。
@@ -121,7 +131,7 @@ npm run test:e2e
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | API 地址 | `https://api.openai.com/v1` | 支持 OpenAI 兼容格式和 Gemini Native 格式 |
-| API 密钥 | `sk-xx2` | 必填，对应 API 提供商的密钥 |
+| API 密钥 | 空 | 必填，对应 API 提供商的密钥 |
 | 模型名称 | `gpt-5.4` | 任意支持视觉能力的模型 |
 | Prompt | 内置 OCR 转录提示词 | 可自定义 |
 
@@ -144,7 +154,7 @@ npm run test:e2e
 用户操作
     |
     v
-App.jsx（UI 层）
+App.tsx（UI 层）
     |
     v
 fileAdditionQueue -----> pagesStore（Context + Reducer）
@@ -177,7 +187,7 @@ IndexedDB (Dexie.js) <--- 持久化存储
 ## 注意事项
 
 - **并发控制**：任务队列默认最大并发数为 3，遇到限流时智能退避
-- **图片压缩**：超过 2048px 分辨率或 1MB 大小时自动压缩后再上传
+- **图片压缩**：超过 2048px 分辨率或 1MB 大小时自动压缩后再上传，优先转为 WebP，不支持时回退到 JPEG
 - **代码分割**：PDF 服务、导出服务、DOCX 生成器均为懒加载，首次使用时才下载
 - **URL 协议**：仅支持 `https:` / `http:` / `data:` 协议，不支持本地 `file:` 路径
 - **跨域限制**：通过 URL 加载图片受浏览器 CORS 策略约束，若目标服务器未开放跨域则会失败，建议直接上传文件
