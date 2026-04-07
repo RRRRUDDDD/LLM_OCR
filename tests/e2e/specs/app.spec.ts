@@ -34,4 +34,25 @@ test.describe('App Launch', () => {
 
     expect(newTheme).not.toBe(initialTheme);
   });
+
+  test('should preserve provider-specific drafts when switching providers in settings', async ({ page }) => {
+    const app = new AppPage(page);
+    await app.openSettings();
+
+    const provider = page.locator('#settings-provider');
+    const baseUrl = page.locator('#settings-base-url');
+    const model = page.locator('#settings-model');
+
+    await provider.selectOption('openai_compatible');
+    await baseUrl.fill('https://custom-openai.example/v1');
+    await model.fill('custom-openai-model');
+
+    await provider.selectOption('gemini_native');
+    await baseUrl.fill('https://custom-gemini.example/v1beta');
+    await model.fill('custom-gemini-model');
+
+    await provider.selectOption('openai_compatible');
+    await expect(baseUrl).toHaveValue('https://custom-openai.example/v1');
+    await expect(model).toHaveValue('custom-openai-model');
+  });
 });

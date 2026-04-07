@@ -190,22 +190,22 @@ export default function ResultPanel({
   const lines = useMemo(() => (hasResult ? result.split('\n') : []), [result, hasResult]);
 
   const singleExportItems = useMemo<DropdownItem[] | null>(() => {
-    if (!onExport || !isDone) return null;
+    if (!onExport || !hasResult) return null;
     return [
       { key: 'md', icon: 'description', label: 'Markdown', onClick: () => onExport('md') },
       { key: 'txt', icon: 'text_snippet', label: 'Text', onClick: () => onExport('txt') },
       { key: 'docx', icon: 'article', label: 'Word', onClick: () => onExport('docx') },
     ];
-  }, [onExport, isDone]);
+  }, [onExport, hasResult]);
 
   const allExportItems = useMemo<DropdownItem[] | null>(() => {
-    if (!onExportAll || !isDone || totalImages <= 1 || hasPendingPages) return null;
+    if (!onExportAll || totalImages <= 1) return null;
     return [
       { key: 'md', icon: 'description', label: 'Markdown', onClick: () => onExportAll('md') },
       { key: 'txt', icon: 'text_snippet', label: 'Text', onClick: () => onExportAll('txt') },
       { key: 'docx', icon: 'article', label: 'Word', onClick: () => onExportAll('docx') },
     ];
-  }, [onExportAll, isDone, totalImages, hasPendingPages]);
+  }, [onExportAll, totalImages]);
 
   if (!showPanel) return null;
 

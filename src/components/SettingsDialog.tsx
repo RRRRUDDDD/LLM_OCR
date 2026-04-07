@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type FormEvent, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import useFocusTrap from '../hooks/useFocusTrap';
-import type { ApiConfig } from '../types/api';
+import type { ApiConfig, OcrProvider } from '../types/api';
 
 const DEFAULT_PROMPT =
   '你是一个精确的 OCR 转录引擎。你的唯一任务是将图片中的文字原样转录。\n\n' +
@@ -23,10 +23,30 @@ const DEFAULT_PROMPT =
   '现在请转录图片中的全部文字。';
 
 export const DEFAULT_API_CONFIG: ApiConfig = {
+  provider: 'openai_compatible',
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
-  model: 'gpt-4o',
+  model: 'gpt-5.4',
   prompt: DEFAULT_PROMPT,
+  ocrLanguage: '',
+};
+
+const PROVIDER_PRESETS: Record<OcrProvider, Pick<ApiConfig, 'baseUrl' | 'model' | 'ocrLanguage'>> = {
+  openai_compatible: {
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-5.4',
+    ocrLanguage: '',
+  },
+  gemini_native: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    model: 'gemini-2.5-flash',
+    ocrLanguage: '',
+  },
+  deepseek_ocr_api: {
+    baseUrl: 'https://api.deepseek-ocr.ai/v1/ocr',
+    model: '',
+    ocrLanguage: 'auto',
+  },
 };
 
 type UrlErrorKey = 'settings.urlHttpsRequired' | 'settings.urlInvalid';
@@ -36,6 +56,25 @@ interface SettingsDialogProps {
   apiConfig: ApiConfig;
   onSave: (config: ApiConfig) => void;
   onClose: () => void;
+}
+
+function createProviderDraft(provider: OcrProvider): ApiConfig {
+  const preset = PROVIDER_PRESETS[provider];
+  return {
+    ...DEFAULT_API_CONFIG,
+    provider,
+    baseUrl: preset.baseUrl,
+    model: preset.model,
+    ocrLanguage: preset.ocrLanguage,
+  };
+}
+
+function createProviderDrafts(currentConfig: ApiConfig): Record<OcrProvider, ApiConfig> {
+  return {
+    openai_compatible: currentConfig.provider === 'openai_compatible' ? currentConfig : createProviderDraft('openai_compatible'),
+    gemini_native: currentConfig.provider === 'gemini_native' ? currentConfig : createProviderDraft('gemini_native'),
+    deepseek_ocr_api: currentConfig.provider === 'deepseek_ocr_api' ? currentConfig : createProviderDraft('deepseek_ocr_api'),
+  };
 }
 
 function validateBaseUrl(url: string): UrlErrorKey | null {
@@ -55,6 +94,7 @@ function validateBaseUrl(url: string): UrlErrorKey | null {
 export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: SettingsDialogProps) {
   const { t } = useTranslation();
   const [form, setForm] = useState<ApiConfig>(apiConfig);
+  const [providerDrafts, setProviderDrafts] = useState<Record<OcrProvider, ApiConfig>>(() => createProviderDrafts(apiConfig));
   const [showApiKey, setShowApiKey] = useState(false);
   const [urlError, setUrlError] = useState<UrlErrorKey | null>(null);
 
@@ -64,6 +104,7 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
   useEffect(() => {
     if (isOpen) {
       setForm(apiConfig);
+      setProviderDrafts(createProviderDrafts(apiConfig));
       setShowApiKey(false);
       setUrlError(null);
       requestAnimationFrame(() => keyRef.current?.focus());
@@ -72,11 +113,14 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
 
   const handleSubmit = useCallback((event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
+    const preset = PROVIDER_PRESETS[form.provider];
     const trimmed: ApiConfig = {
-      baseUrl: form.baseUrl.trim() || DEFAULT_API_CONFIG.baseUrl,
+      provider: form.provider,
+      baseUrl: form.baseUrl.trim() || preset.baseUrl,
       apiKey: form.apiKey.trim(),
-      model: form.model.trim() || DEFAULT_API_CONFIG.model,
+      model: form.provider === 'deepseek_ocr_api' ? '' : (form.model.trim() || preset.model || DEFAULT_API_CONFIG.model),
       prompt: form.prompt.trimEnd() || DEFAULT_API_CONFIG.prompt,
+      ocrLanguage: form.provider === 'deepseek_ocr_api' ? (form.ocrLanguage?.trim() || preset.ocrLanguage || 'auto') : '',
     };
 
     const validationError = validateBaseUrl(trimmed.baseUrl);
@@ -96,11 +140,42 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
     setUrlError(null);
   }, []);
 
+  const handleProviderChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const provider = event.target.value as OcrProvider;
+    setProviderDrafts((prev) => {
+      const nextDrafts = {
+        ...prev,
+        [form.provider]: form,
+      };
+      setForm(nextDrafts[provider] || createProviderDraft(provider));
+      return nextDrafts;
+    });
+    setUrlError(null);
+  }, [form]);
+
   const updateField = useCallback((field: keyof ApiConfig) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const nextValue = event.target.value;
-    setForm((prev) => ({ ...prev, [field]: nextValue }));
+    setForm((prev) => {
+      const nextForm = { ...prev, [field]: nextValue };
+      setProviderDrafts((drafts) => ({
+        ...drafts,
+        [nextForm.provider]: nextForm,
+      }));
+      return nextForm;
+    });
     if (field === 'baseUrl') setUrlError(null);
   }, []);
+
+  const providerHelperKey:
+    | 'settings.deepSeekProviderHint'
+    | 'settings.geminiProviderHint'
+    | 'settings.openAiProviderHint' = (
+    form.provider === 'deepseek_ocr_api'
+      ? 'settings.deepSeekProviderHint'
+      : form.provider === 'gemini_native'
+        ? 'settings.geminiProviderHint'
+        : 'settings.openAiProviderHint'
+  );
 
   if (!isOpen) return null;
 
@@ -119,6 +194,23 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
         <p className="settings-dialog__desc">{t('settings.storedLocally', 'Settings are stored in your browser and persist across refreshes')}</p>
 
         <div className="settings-dialog__form">
+          <div className="md-text-field">
+            <select
+              value={form.provider}
+              onChange={handleProviderChange}
+              className="md-text-field__input"
+              id="settings-provider"
+            >
+              <option value="openai_compatible">{t('settings.providerOpenAI')}</option>
+              <option value="gemini_native">{t('settings.providerGemini')}</option>
+              <option value="deepseek_ocr_api">{t('settings.providerDeepSeekOcr')}</option>
+            </select>
+            <label htmlFor="settings-provider" className="md-text-field__label">{t('settings.provider')}</label>
+          </div>
+          <p className="settings-dialog__helper settings-dialog__helper--info" role="note">
+            {t(providerHelperKey)}
+          </p>
+
           <div className="md-text-field">
             <input
               type="text"
@@ -165,17 +257,33 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
             </p>
           )}
 
-          <div className="md-text-field">
-            <input
-              type="text"
-              value={form.model}
-              onChange={updateField('model')}
-              placeholder=" "
-              className="md-text-field__input"
-              id="settings-model"
-            />
-            <label htmlFor="settings-model" className="md-text-field__label">{t('settings.model')}</label>
-          </div>
+          {form.provider !== 'deepseek_ocr_api' && (
+            <div className="md-text-field">
+              <input
+                type="text"
+                value={form.model}
+                onChange={updateField('model')}
+                placeholder=" "
+                className="md-text-field__input"
+                id="settings-model"
+              />
+              <label htmlFor="settings-model" className="md-text-field__label">{t('settings.model')}</label>
+            </div>
+          )}
+
+          {form.provider === 'deepseek_ocr_api' && (
+            <div className="md-text-field">
+              <input
+                type="text"
+                value={form.ocrLanguage || ''}
+                onChange={updateField('ocrLanguage')}
+                placeholder=" "
+                className="md-text-field__input"
+                id="settings-ocr-language"
+              />
+              <label htmlFor="settings-ocr-language" className="md-text-field__label">{t('settings.ocrLanguage')}</label>
+            </div>
+          )}
 
           <div className="md-text-field md-text-field--textarea">
             <textarea

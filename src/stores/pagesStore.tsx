@@ -13,6 +13,8 @@ import {
 import { db, generateId } from '../db/index';
 import { ocrEvents } from '../events/ocrEvents';
 import { dbLogger } from '../utils/logger';
+import createThumbnail from '../utils/createThumbnail';
+import { createPagePersistenceBuffer } from '../services/pagePersistence';
 import type { OcrEventMap } from '../types/events';
 import type { Page, PageStatus, StoredPage } from '../types/page';
 
@@ -34,11 +36,36 @@ export const PAGE_STATUS = {
   ERROR: 'error',
 } as const satisfies Record<'IDLE' | 'QUEUED' | 'PROCESSING' | 'DONE' | 'ERROR', PageStatus>;
 
+function isPreviewableFileType(fileType: string): boolean {
+  return fileType.startsWith('image/');
+}
+
 interface PagesState {
   pages: Page[];
   selectedPageId: string | null;
+  pageIndexById: Record<string, number>;
+  processingCount: number;
+  completedCount: number;
   initialized: boolean;
 }
+
+function getStatusCounts(pages: Page[]): Pick<PagesState, 'processingCount' | 'completedCount'> {
+  let processingCount = 0;
+  let completedCount = 0;
+
+  for (const page of pages) {
+    if (page.status === PAGE_STATUS.PROCESSING || page.status === PAGE_STATUS.QUEUED) {
+      processingCount++;
+    } else if (page.status === PAGE_STATUS.DONE) {
+      completedCount++;
+    }
+  }
+
+  return { processingCount, completedCount };
+}
+
+const THUMBNAIL_BACKFILL_BATCH_SIZE = 4;
+const MAX_CACHED_IMAGE_URLS = 12;
 
 type PagesAction =
   | { type: 'SET_PAGES'; pages: Page[] }
@@ -73,6 +100,7 @@ export interface UsePagesResult {
   goTo: (index: number) => void;
   loadFromDB: () => Promise<void>;
   loadImageUrl: (pageId: string) => Promise<string | null>;
+  syncVisibleImages: (pageIds: string[]) => Promise<void>;
   prevPage: () => void;
   nextPage: () => void;
 }
@@ -83,32 +111,65 @@ function pagesReducer(state: PagesState, action: PagesAction): PagesState {
       return {
         ...state,
         pages: action.pages,
+        pageIndexById: Object.fromEntries(action.pages.map((page, index) => [page.id, index])),
+        ...getStatusCounts(action.pages),
         selectedPageId: action.pages.some((page) => page.id === state.selectedPageId)
           ? state.selectedPageId
           : (action.pages[0]?.id ?? null),
         initialized: true,
       };
 
-    case 'ADD_PAGE':
-      return { ...state, pages: [...state.pages, action.page] };
-
-    case 'UPDATE_PAGE':
+    case 'ADD_PAGE': {
+      const nextIndex = state.pages.length;
+      const nextPages = [...state.pages, action.page];
       return {
         ...state,
-        pages: state.pages.map((page) =>
-          page.id === action.id ? { ...page, ...action.updates, updatedAt: new Date() } : page
-        ),
+        pages: nextPages,
+        pageIndexById: {
+          ...state.pageIndexById,
+          [action.page.id]: nextIndex,
+        },
+        ...getStatusCounts(nextPages),
       };
+    }
+
+    case 'UPDATE_PAGE': {
+      const pageIndex = state.pageIndexById[action.id];
+      if (pageIndex === undefined) return state;
+
+      const currentPage = state.pages[pageIndex];
+      const hasRealChange = Object.entries(action.updates).some(([key, value]) => currentPage[key as keyof Page] !== value);
+      if (!hasRealChange) return state;
+
+      const nextPages = state.pages.slice();
+      nextPages[pageIndex] = {
+        ...currentPage,
+        ...action.updates,
+        updatedAt: new Date(),
+      };
+
+      return {
+        ...state,
+        pages: nextPages,
+        ...getStatusCounts(nextPages),
+      };
+    }
 
     case 'DELETE_PAGES': {
       const ids = new Set(action.ids);
       const pages = state.pages.filter((page) => !ids.has(page.id));
       const selectedId = ids.has(state.selectedPageId ?? '') ? (pages[0]?.id ?? null) : state.selectedPageId;
-      return { ...state, pages, selectedPageId: selectedId };
+      return {
+        ...state,
+        pages,
+        pageIndexById: Object.fromEntries(pages.map((page, index) => [page.id, index])),
+        ...getStatusCounts(pages),
+        selectedPageId: selectedId,
+      };
     }
 
     case 'CLEAR_ALL':
-      return { ...state, pages: [], selectedPageId: null };
+      return { ...state, pages: [], pageIndexById: {}, processingCount: 0, completedCount: 0, selectedPageId: null };
 
     case 'SELECT_PAGE':
       return { ...state, selectedPageId: action.id };
@@ -126,6 +187,9 @@ function pagesReducer(state: PagesState, action: PagesAction): PagesState {
 const initialState: PagesState = {
   pages: [],
   selectedPageId: null,
+  pageIndexById: {},
+  processingCount: 0,
+  completedCount: 0,
   initialized: false,
 };
 
@@ -137,14 +201,19 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   const objectUrlsRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
+    const persistenceBuffer = createPagePersistenceBuffer(
+      db,
+      (scope, error) => dbLogger.error(scope + ':', error),
+    );
+
     const handleQueued = ({ imageId }: OcrEventMap['ocr:queued']) => {
       dispatch({ type: 'UPDATE_PAGE', id: imageId, updates: { status: PAGE_STATUS.QUEUED } });
-      db.updateImage(imageId, { status: PAGE_STATUS.QUEUED }).catch((error) => dbLogger.error('DB update failed:', error));
+      persistenceBuffer.queueImageUpdate(imageId, { status: PAGE_STATUS.QUEUED });
     };
 
     const handleStart = ({ imageId }: OcrEventMap['ocr:start']) => {
       dispatch({ type: 'UPDATE_PAGE', id: imageId, updates: { status: PAGE_STATUS.PROCESSING } });
-      db.updateImage(imageId, { status: PAGE_STATUS.PROCESSING }).catch((error) => dbLogger.error('DB update failed:', error));
+      persistenceBuffer.queueImageUpdate(imageId, { status: PAGE_STATUS.PROCESSING });
     };
 
     const handleProgress = ({ imageId, text }: OcrEventMap['ocr:progress']) => {
@@ -157,8 +226,8 @@ export function PagesProvider({ children }: { children: ReactNode }) {
         id: imageId,
         updates: { status: PAGE_STATUS.DONE, ocrText: text },
       });
-      db.updateImage(imageId, { status: PAGE_STATUS.DONE, ocrText: text }).catch((error) => dbLogger.error('DB update failed:', error));
-      db.saveOcrResult(imageId, { text, rawText: text, status: PAGE_STATUS.DONE, createdAt: new Date() }).catch((error) => dbLogger.error('DB save OCR failed:', error));
+      persistenceBuffer.queueImageUpdate(imageId, { status: PAGE_STATUS.DONE, ocrText: text });
+      persistenceBuffer.queueOcrSave(imageId, { text, rawText: text, status: PAGE_STATUS.DONE, createdAt: new Date() });
     };
 
     const handleError = ({ imageId, error }: OcrEventMap['ocr:error']) => {
@@ -168,8 +237,8 @@ export function PagesProvider({ children }: { children: ReactNode }) {
         id: imageId,
         updates: { status: PAGE_STATUS.ERROR, ocrText: `Error: ${message}` },
       });
-      db.updateImage(imageId, { status: PAGE_STATUS.ERROR, ocrText: `Error: ${message}` }).catch((dbError) => dbLogger.error('DB update failed:', dbError));
-      db.deleteOcrResult(imageId).catch((dbError) => dbLogger.error('DB delete OCR failed:', dbError));
+      persistenceBuffer.queueImageUpdate(imageId, { status: PAGE_STATUS.ERROR, ocrText: `Error: ${message}` });
+      persistenceBuffer.queueOcrDelete(imageId);
     };
 
     const handleCancelled = ({ imageId }: OcrEventMap['ocr:cancelled']) => {
@@ -178,8 +247,8 @@ export function PagesProvider({ children }: { children: ReactNode }) {
         id: imageId,
         updates: { status: PAGE_STATUS.IDLE, ocrText: '' },
       });
-      db.updateImage(imageId, { status: PAGE_STATUS.IDLE, ocrText: '' }).catch((error) => dbLogger.error('DB update failed:', error));
-      db.deleteOcrResult(imageId).catch((error) => dbLogger.error('DB delete OCR failed:', error));
+      persistenceBuffer.queueImageUpdate(imageId, { status: PAGE_STATUS.IDLE, ocrText: '' });
+      persistenceBuffer.queueOcrDelete(imageId);
     };
 
     ocrEvents.on('ocr:queued', handleQueued);
@@ -196,6 +265,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
       ocrEvents.off('ocr:success', handleSuccess);
       ocrEvents.off('ocr:error', handleError);
       ocrEvents.off('ocr:cancelled', handleCancelled);
+      void persistenceBuffer.dispose();
     };
   }, []);
 
@@ -238,23 +308,49 @@ export function usePages(): UsePagesResult {
   }
 
   const { state, objectUrlsRef } = pagesContext;
-  const { pages, selectedPageId, initialized } = state;
+  const { pages, selectedPageId, pageIndexById, processingCount, completedCount, initialized } = state;
 
-  const currentIndex = pages.findIndex((page) => page.id === selectedPageId);
+  const currentIndex = selectedPageId ? (pageIndexById[selectedPageId] ?? -1) : -1;
   const currentPage = currentIndex >= 0 ? pages[currentIndex] : null;
-  const processingCount = useMemo(
-    () => pages.filter((page) => page.status === PAGE_STATUS.PROCESSING || page.status === PAGE_STATUS.QUEUED).length,
-    [pages]
-  );
-  const completedCount = useMemo(
-    () => pages.filter((page) => page.status === PAGE_STATUS.DONE).length,
-    [pages]
-  );
+
+  const touchCachedImage = useCallback((pageId: string): void => {
+    const cached = objectUrlsRef.current.get(pageId);
+    if (!cached) return;
+    objectUrlsRef.current.delete(pageId);
+    objectUrlsRef.current.set(pageId, cached);
+  }, [objectUrlsRef]);
+
+  const evictCachedImages = useCallback((pinnedIds: Set<string>): void => {
+    while (objectUrlsRef.current.size > MAX_CACHED_IMAGE_URLS) {
+      const oldest = objectUrlsRef.current.entries().next().value as [string, string] | undefined;
+      if (!oldest) break;
+
+      const [pageId, url] = oldest;
+      if (pinnedIds.has(pageId)) {
+        objectUrlsRef.current.delete(pageId);
+        objectUrlsRef.current.set(pageId, url);
+        continue;
+      }
+
+      URL.revokeObjectURL(url);
+      objectUrlsRef.current.delete(pageId);
+      dispatch({ type: 'UPDATE_PAGE', id: pageId, updates: { imageUrl: '' } });
+    }
+  }, [dispatch, objectUrlsRef]);
 
   const addPage = useCallback(async (file: File): Promise<Page> => {
     const id = generateId('img');
-    const objectUrl = URL.createObjectURL(file);
-    objectUrlsRef.current.set(id, objectUrl);
+    const previewable = isPreviewableFileType(file.type);
+    const objectUrl = previewable ? URL.createObjectURL(file) : '';
+    if (objectUrl) {
+      objectUrlsRef.current.set(id, objectUrl);
+    }
+    const thumbnailUrl = previewable
+      ? await createThumbnail(file).catch((error) => {
+          dbLogger.warn('Failed to generate thumbnail:', error);
+          return '';
+        })
+      : '';
 
     const page: Page = {
       id,
@@ -264,6 +360,7 @@ export function usePages(): UsePagesResult {
       status: PAGE_STATUS.IDLE,
       ocrText: '',
       imageUrl: objectUrl,
+      thumbnailUrl,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -271,8 +368,7 @@ export function usePages(): UsePagesResult {
     dispatch({ type: 'ADD_PAGE', page });
 
     try {
-      await db.saveImage(page);
-      await db.saveImageBlob(id, file);
+      await db.saveImageWithBlob(page, file);
     } catch (error) {
       dbLogger.error('Failed to persist page:', error);
     }
@@ -317,32 +413,61 @@ export function usePages(): UsePagesResult {
 
   const loadFromDB = useCallback(async (): Promise<void> => {
     try {
-      const saved = await db.getAllImages();
-      const loadedPages: Page[] = saved.map((image: StoredPage) => ({
-        ...image,
-        imageUrl: '',
-        status: image.status || PAGE_STATUS.IDLE,
-        ocrText: image.ocrText || '',
-      }));
+      for (const url of objectUrlsRef.current.values()) {
+        URL.revokeObjectURL(url);
+      }
+      objectUrlsRef.current.clear();
+
+      const [saved, ocrResults] = await Promise.all([
+        db.getAllImages(),
+        db.getAllOcrResults(),
+      ]);
+      const ocrById = new Map(ocrResults.map((result) => [result.imageId, result] as const));
+
+      const loadedPages: Page[] = saved.map((image: StoredPage) => {
+        const result = ocrById.get(image.id);
+        return {
+          ...image,
+          imageUrl: '',
+          status: result?.status || image.status || PAGE_STATUS.IDLE,
+          ocrText: result?.text || image.ocrText || '',
+        };
+      });
+
       dispatch({ type: 'SET_PAGES', pages: loadedPages });
 
-      for (const page of loadedPages) {
-        const blob = await db.getImageBlob(page.id);
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          objectUrlsRef.current.set(page.id, url);
-          dispatch({ type: 'UPDATE_PAGE', id: page.id, updates: { imageUrl: url } });
-        }
+      const missingThumbnails = loadedPages.filter((page) => !page.thumbnailUrl);
+      void (async () => {
+        const previewablePages = missingThumbnails.filter((page) => isPreviewableFileType(page.fileType));
 
-        const result = await db.getOcrResult(page.id);
-        if (result?.text) {
-          dispatch({
-            type: 'UPDATE_PAGE',
-            id: page.id,
-            updates: { ocrText: result.text, status: PAGE_STATUS.DONE },
-          });
+        for (let offset = 0; offset < previewablePages.length; offset += THUMBNAIL_BACKFILL_BATCH_SIZE) {
+          const batch = previewablePages.slice(offset, offset + THUMBNAIL_BACKFILL_BATCH_SIZE);
+          const results = await Promise.all(batch.map(async (page) => {
+            try {
+              const blob = await db.getImageBlob(page.id);
+              if (!blob) return null;
+
+              const thumbnailUrl = await createThumbnail(blob);
+              return { id: page.id, thumbnailUrl };
+            } catch (error) {
+              dbLogger.warn('Failed to backfill thumbnail:', error);
+              return null;
+            }
+          }));
+
+          const updates = results.filter((result): result is { id: string; thumbnailUrl: string } => Boolean(result));
+          if (updates.length === 0) continue;
+
+          for (const update of updates) {
+            dispatch({ type: 'UPDATE_PAGE', id: update.id, updates: { thumbnailUrl: update.thumbnailUrl } });
+          }
+
+          await db.bulkUpdateImages(updates.map((update) => ({
+            id: update.id,
+            updates: { thumbnailUrl: update.thumbnailUrl },
+          })));
         }
-      }
+      })();
     } catch (error) {
       dbLogger.error('Failed to load pages from DB:', error);
       dispatch({ type: 'SET_PAGES', pages: [] });
@@ -351,28 +476,64 @@ export function usePages(): UsePagesResult {
 
   const loadImageUrl = useCallback(async (pageId: string): Promise<string | null> => {
     const cached = objectUrlsRef.current.get(pageId);
-    if (cached) return cached;
+    if (cached) {
+      touchCachedImage(pageId);
+      return cached;
+    }
+
+    const pageIndex = state.pageIndexById[pageId];
+    if (pageIndex === undefined) return null;
+    const page = state.pages[pageIndex];
+    if (!isPreviewableFileType(page.fileType)) return null;
 
     const blob = await db.getImageBlob(pageId);
     if (blob) {
       const url = URL.createObjectURL(blob);
       objectUrlsRef.current.set(pageId, url);
+      touchCachedImage(pageId);
+      evictCachedImages(new Set([pageId]));
       dispatch({ type: 'UPDATE_PAGE', id: pageId, updates: { imageUrl: url } });
       return url;
     }
 
     return null;
-  }, [dispatch, objectUrlsRef]);
+  }, [dispatch, evictCachedImages, objectUrlsRef, state.pageIndexById, state.pages, touchCachedImage]);
+
+  const syncVisibleImages = useCallback(async (pageIds: string[]): Promise<void> => {
+    const targetIds = new Set(pageIds.filter(Boolean));
+
+    await Promise.all(Array.from(targetIds, async (pageId) => {
+      if (objectUrlsRef.current.has(pageId)) {
+        touchCachedImage(pageId);
+        return;
+      }
+
+      const pageIndex = state.pageIndexById[pageId];
+      if (pageIndex === undefined) return;
+      const page = state.pages[pageIndex];
+      if (!isPreviewableFileType(page.fileType)) return;
+
+      const blob = await db.getImageBlob(pageId);
+      if (!blob) return;
+
+      const url = URL.createObjectURL(blob);
+      objectUrlsRef.current.set(pageId, url);
+      touchCachedImage(pageId);
+      dispatch({ type: 'UPDATE_PAGE', id: pageId, updates: { imageUrl: url } });
+    }));
+
+    evictCachedImages(targetIds);
+  }, [dispatch, evictCachedImages, objectUrlsRef, state.pageIndexById, state.pages, touchCachedImage]);
 
   const prevPage = useCallback((): void => {
-    const idx = pages.findIndex((page) => page.id === selectedPageId);
-    if (idx > 0) dispatch({ type: 'SET_CURRENT_INDEX', index: idx - 1 });
-  }, [pages, selectedPageId, dispatch]);
+    if (currentIndex > 0) dispatch({ type: 'SET_CURRENT_INDEX', index: currentIndex - 1 });
+  }, [currentIndex, dispatch]);
 
   const nextPage = useCallback((): void => {
-    const idx = pages.findIndex((page) => page.id === selectedPageId);
-    if (idx >= 0 && idx < pages.length - 1) dispatch({ type: 'SET_CURRENT_INDEX', index: idx + 1 });
-  }, [pages, selectedPageId, dispatch]);
+    if (currentIndex >= 0 && currentIndex < pages.length - 1) {
+      dispatch({ type: 'SET_CURRENT_INDEX', index: currentIndex + 1 });
+    }
+  }, [currentIndex, pages.length, dispatch]);
 
   return {
     pages,
@@ -393,6 +554,7 @@ export function usePages(): UsePagesResult {
     goTo,
     loadFromDB,
     loadImageUrl,
+    syncVisibleImages,
     prevPage,
     nextPage,
   };

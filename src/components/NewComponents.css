@@ -55,6 +55,7 @@
   position: absolute;
   top: 2px;
   right: 2px;
+  z-index: 3;
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -66,16 +67,18 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.page-thumbnail:hover .page-thumbnail__cancel {
-  opacity: 1;
+  opacity: 0.95;
+  transition: background-color 0.15s, transform 0.15s;
 }
 
 .page-thumbnail__cancel .material-icons-round {
   font-size: 14px;
+}
+
+.page-thumbnail__cancel:hover,
+.page-thumbnail__cancel:focus-visible {
+  background: rgba(211, 47, 47, 0.9);
+  transform: scale(1.05);
 }
 
 /* ── Status Badge ── */

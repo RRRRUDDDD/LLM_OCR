@@ -6,6 +6,14 @@ import { ocrLogger } from '../utils/logger';
 interface RenderablePdfPage {
   getViewport: (params: { scale: number }) => { width: number; height: number };
   render: (params: { canvasContext: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D; viewport: { width: number; height: number } }) => { promise: Promise<void> };
+  cleanup?: () => void;
+}
+
+interface RenderablePdfDocument {
+  numPages: number;
+  getPage: (pageNumber: number) => Promise<RenderablePdfPage>;
+  cleanup?: () => void | Promise<void>;
+  destroy?: () => void | Promise<void>;
 }
 
 export interface ExtractedPdfPage {
@@ -20,6 +28,12 @@ export interface ExtractedPdfPage {
 export interface ExtractPdfOptions {
   scale?: number;
   signal?: AbortSignal;
+  onPage?: (page: ExtractedPdfPage) => void | Promise<void>;
+}
+
+export interface ExtractPdfSummary {
+  pageIds: string[];
+  totalPages: number;
 }
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -69,15 +83,16 @@ async function renderPageToBlobFallback(page: RenderablePdfPage, scale = DEFAULT
   });
 }
 
-export async function extractPdfPages(file: File, options: ExtractPdfOptions = {}): Promise<ExtractedPdfPage[]> {
-  const { scale = DEFAULT_SCALE, signal } = options;
+export async function extractPdfPages(file: File, options: ExtractPdfOptions = {}): Promise<ExtractPdfSummary> {
+  const { scale = DEFAULT_SCALE, signal, onPage } = options;
   const fileName = file.name;
+  let pdf: RenderablePdfDocument | null = null;
 
   try {
     const arrayBuffer = await file.arrayBuffer();
-    if (signal?.aborted) return [];
+    if (signal?.aborted) return { pageIds: [], totalPages: 0 };
 
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise as unknown as RenderablePdfDocument;
     const totalPages = pdf.numPages;
 
     ocrEvents.emit('pdf:start', { fileName, totalPages });
@@ -86,41 +101,56 @@ export async function extractPdfPages(file: File, options: ExtractPdfOptions = {
     const supportsOffscreen = typeof OffscreenCanvas !== 'undefined';
     const renderFn = supportsOffscreen ? renderPageToBlob : renderPageToBlobFallback;
 
-    const results: ExtractedPdfPage[] = [];
+    const pageIds: string[] = [];
 
     for (let i = 1; i <= totalPages; i++) {
       if (signal?.aborted) break;
 
       const page = await pdf.getPage(i) as unknown as RenderablePdfPage;
-      const { blob, width, height } = await renderFn(page, scale);
+      try {
+        const { blob, width, height } = await renderFn(page, scale);
+        const pageId = generateId('pdf');
+        const extractedPage: ExtractedPdfPage = {
+          id: pageId,
+          blob,
+          width,
+          height,
+          pageNumber: i,
+          fileName: `${fileName} - Page ${i}`,
+        };
 
-      const pageId = generateId('pdf');
+        pageIds.push(pageId);
+        await onPage?.(extractedPage);
 
-      results.push({ id: pageId, blob, width, height, pageNumber: i, fileName: `${fileName} - Page ${i}` });
-
-      ocrEvents.emit('pdf:page:done', {
-        pageIndex: i - 1,
-        pageId,
-        blob,
-        width,
-        height,
-      });
-      ocrEvents.emit('pdf:progress', { done: i, total: totalPages, fileName });
+        ocrEvents.emit('pdf:page:done', {
+          pageIndex: i - 1,
+          pageId,
+          blob,
+          width,
+          height,
+        });
+        ocrEvents.emit('pdf:progress', { done: i, total: totalPages, fileName });
+      } finally {
+        page.cleanup?.();
+      }
     }
 
     ocrEvents.emit('pdf:complete', {
       fileName,
       totalPages,
-      pageIds: results.map((r) => r.id),
+      pageIds,
     });
 
-    ocrLogger.info(`[PDF] Completed "${fileName}": ${results.length} pages extracted`);
-    return results;
+    ocrLogger.info(`[PDF] Completed "${fileName}": ${pageIds.length} pages extracted`);
+    return { pageIds, totalPages };
   } catch (error: unknown) {
-    if (error instanceof DOMException && error.name === 'AbortError') return [];
+    if (error instanceof DOMException && error.name === 'AbortError') return { pageIds: [], totalPages: 0 };
     const normalizedError = error instanceof Error ? error : new Error(String(error));
     ocrLogger.error(`[PDF] Failed to process "${fileName}":`, normalizedError);
     ocrEvents.emit('pdf:error', { fileName, error: normalizedError });
     throw normalizedError;
+  } finally {
+    await pdf?.cleanup?.();
+    await pdf?.destroy?.();
   }
 }

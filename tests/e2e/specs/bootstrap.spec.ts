@@ -8,6 +8,7 @@ test.describe('Bootstrap Flow', () => {
       indexedDB.deleteDatabase('LLM_OCR');
 
       const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W0XQAAAAASUVORK5CYII=';
+      const thumbnailUrl = `data:image/png;base64,${pngBase64}`;
       const pngBytes = Uint8Array.from(atob(pngBase64), (char) => char.charCodeAt(0));
       const blob = new Blob([pngBytes], { type: 'image/png' });
       const now = new Date();
@@ -102,5 +103,101 @@ test.describe('Bootstrap Flow', () => {
 
     await expect(page.locator('.settings-overlay')).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  });
+
+  test('only keeps a small window of restored images mounted at once', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(async () => {
+      // @ts-expect-error Runtime-only Vite module import inside browser context.
+      const { db } = await import('/src/db/index.ts');
+
+      localStorage.clear();
+      localStorage.setItem('ocr-api-config', JSON.stringify({ apiKey: 'persisted-key', model: 'gpt-4o-mini' }));
+
+      const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W0XQAAAAASUVORK5CYII=';
+      const thumbnailUrl = `data:image/png;base64,${pngBase64}`;
+      const pngBytes = Uint8Array.from(atob(pngBase64), (char) => char.charCodeAt(0));
+      const blob = new Blob([pngBytes], { type: 'image/png' });
+      const now = new Date();
+
+      await db.deleteAllImages();
+
+      for (let index = 0; index < 10; index++) {
+        const id = `seed-page-${index + 1}`;
+        await db.saveImageWithBlob({
+          id,
+          fileName: `seed-${index + 1}.png`,
+          fileSize: blob.size,
+          fileType: 'image/png',
+          status: 'done',
+          ocrText: `Recovered OCR text ${index + 1}`,
+          thumbnailUrl,
+          order: index,
+          createdAt: now,
+          updatedAt: now,
+        }, blob);
+        await db.saveOcrResult(id, {
+          text: `Recovered OCR text ${index + 1}`,
+          rawText: `Recovered OCR text ${index + 1}`,
+          status: 'done',
+          createdAt: now,
+        });
+      }
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.locator('.image-counter')).toHaveText('1 / 10');
+    await expect(page.getByRole('button', { name: 'Export options' })).toHaveCount(2);
+    await expect(page.locator('.page-thumbnail__img')).toHaveCount(10);
+    const blobImageCount = await page.evaluate(() => (
+      Array.from(document.querySelectorAll('img'))
+        .map((img) => img.getAttribute('src') || '')
+        .filter((src) => src.startsWith('blob:')).length
+    ));
+    expect(blobImageCount).toBe(1);
+  });
+
+  test('renders a placeholder preview for restored PDF entries', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(async () => {
+      // @ts-expect-error Runtime-only Vite module import inside browser context.
+      const { db } = await import('/src/db/index.ts');
+
+      localStorage.clear();
+      localStorage.setItem('ocr-api-config', JSON.stringify({ apiKey: 'persisted-key', provider: 'deepseek_ocr_api' }));
+
+      const now = new Date();
+      const pdfBlob = new Blob(['%PDF-1.4 test'], { type: 'application/pdf' });
+
+      await db.deleteAllImages();
+      await db.saveImageWithBlob({
+        id: 'pdf-page-1',
+        fileName: 'sample.pdf',
+        fileSize: pdfBlob.size,
+        fileType: 'application/pdf',
+        status: 'done',
+        ocrText: 'Recovered PDF OCR text',
+        thumbnailUrl: '',
+        order: 0,
+        createdAt: now,
+        updatedAt: now,
+      }, pdfBlob);
+      await db.saveOcrResult('pdf-page-1', {
+        text: 'Recovered PDF OCR text',
+        rawText: 'Recovered PDF OCR text',
+        status: 'done',
+        createdAt: now,
+      });
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.locator('.image-preview__placeholder')).toContainText('sample.pdf');
+    await expect(page.locator('.image-preview__placeholder .material-icons-round')).toHaveText('picture_as_pdf');
   });
 });

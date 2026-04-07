@@ -8,7 +8,7 @@ import { queueOcrTask } from './services/ocrService';
 import { queueManager } from './services/queueManager';
 import { fileAdditionQueue } from './utils/fileAdditionQueue';
 import { uiLogger } from './utils/logger';
-import type { ApiConfig } from './types/api';
+import { inferProviderFromConfig, type ApiConfig } from './types/api';
 import type { PageStatus } from './types/page';
 import type { ExportFormat } from './types/ui';
 
@@ -36,14 +36,21 @@ function App() {
     pages, currentPage, currentIndex, selectedPageId,
     canGoPrev, canGoNext, totalPages, processingCount,
     addPage, clearAll,
-    selectPage, loadFromDB, loadImageUrl,
+    selectPage, loadFromDB, syncVisibleImages,
     prevPage, nextPage,
   } = usePages();
 
   const [apiConfig, setApiConfig] = useState<ApiConfig>(() => {
     try {
       const saved = localStorage.getItem('ocr-api-config');
-      if (saved) return { ...DEFAULT_API_CONFIG, ...JSON.parse(saved) };
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<ApiConfig>;
+        return {
+          ...DEFAULT_API_CONFIG,
+          ...parsed,
+          provider: inferProviderFromConfig(parsed),
+        };
+      }
     } catch {
       // ignore corrupted local storage
     }
@@ -140,20 +147,43 @@ function App() {
     return true;
   }, [apiConfig.apiKey, showSnack, t]);
 
+  const handlePdfFile = useCallback(async (file: File, shouldSelectFirstPage: boolean): Promise<boolean> => {
+    if (apiConfigRef.current.provider === 'deepseek_ocr_api') {
+      const page = await addPage(file);
+      if (shouldSelectFirstPage) {
+        selectPage(page.id);
+      }
+      queueOcrTask(page.id, file, apiConfigRef.current);
+      return shouldSelectFirstPage;
+    }
+
+    const { extractPdfPages } = await lazyPdf();
+    let selectedAnyPage = false;
+
+    await extractPdfPages(file, {
+      onPage: async (pdfPage) => {
+        const pageFile = new File([pdfPage.blob], `${pdfPage.fileName}.png`, { type: 'image/png' });
+        const page = await addPage(pageFile);
+
+        if (shouldSelectFirstPage && !selectedAnyPage) {
+          selectPage(page.id);
+          selectedAnyPage = true;
+        }
+
+        queueOcrTask(page.id, pageFile, apiConfigRef.current);
+      },
+    });
+
+    return selectedAnyPage;
+  }, [addPage, selectPage]);
+
   const handleSingleFile = useCallback(async (file: File): Promise<void> => {
     if (!checkApiKey()) return;
 
     await fileAdditionQueue.enqueue(async () => {
       try {
         if (isPdfFile(file)) {
-          const { extractPdfPages } = await lazyPdf();
-          const pdfPages = await extractPdfPages(file);
-          for (const pdfPage of pdfPages) {
-            const pageFile = new File([pdfPage.blob], `${pdfPage.fileName}.png`, { type: 'image/png' });
-            const page = await addPage(pageFile);
-            selectPage(page.id);
-            queueOcrTask(page.id, pageFile, apiConfigRef.current);
-          }
+          await handlePdfFile(file, true);
         } else {
           const page = await addPage(file);
           selectPage(page.id);
@@ -205,17 +235,8 @@ function App() {
         let firstPageSelected = false;
         for (const file of files) {
           if (isPdfFile(file)) {
-            const { extractPdfPages } = await lazyPdf();
-            const pdfPages = await extractPdfPages(file);
-            for (const pdfPage of pdfPages) {
-              const pageFile = new File([pdfPage.blob], `${pdfPage.fileName}.png`, { type: 'image/png' });
-              const page = await addPage(pageFile);
-              if (!firstPageSelected) {
-                selectPage(page.id);
-                firstPageSelected = true;
-              }
-              queueOcrTask(page.id, pageFile, apiConfigRef.current);
-            }
+            const selectedFromPdf = await handlePdfFile(file, !firstPageSelected);
+            firstPageSelected = firstPageSelected || selectedFromPdf;
           } else {
             const page = await addPage(file);
             if (!firstPageSelected) {
@@ -230,14 +251,16 @@ function App() {
         showSnack(error instanceof Error ? error.message : 'Failed to process files', 'error');
       }
     });
-  }, [checkApiKey, addPage, selectPage, showSnack]);
+  }, [checkApiKey, addPage, handlePdfFile, selectPage, showSnack]);
 
   const handleSaveSettings = useCallback((config: ApiConfig): void => {
     setApiConfig(config);
     const toStore: Partial<ApiConfig> & Pick<ApiConfig, 'apiKey'> = { ...config };
+    if (toStore.provider === DEFAULT_API_CONFIG.provider) delete toStore.provider;
     if (toStore.prompt === DEFAULT_API_CONFIG.prompt) delete toStore.prompt;
     if (toStore.baseUrl === DEFAULT_API_CONFIG.baseUrl) delete toStore.baseUrl;
     if (toStore.model === DEFAULT_API_CONFIG.model) delete toStore.model;
+    if (toStore.ocrLanguage === DEFAULT_API_CONFIG.ocrLanguage) delete toStore.ocrLanguage;
     localStorage.setItem('ocr-api-config', JSON.stringify(toStore));
     setShowSettings(false);
     showSnack(t('settings.saved'));
@@ -306,16 +329,22 @@ function App() {
     void clearAll();
   }, [clearAll]);
 
-  const imageUrls = useMemo(() => pages.map((page) => page.imageUrl || ''), [pages]);
   const currentResult = currentPage?.ocrText || '';
   const isLoading = currentPage?.status === PAGE_STATUS.PROCESSING;
   const currentStatus: PageStatus = currentPage?.status || PAGE_STATUS.IDLE;
+  const currentImageSrc = currentPage?.imageUrl || '';
 
   useEffect(() => {
-    if (currentPage && !currentPage.imageUrl) {
-      void loadImageUrl(currentPage.id);
-    }
-  }, [currentPage, loadImageUrl]);
+    if (currentIndex < 0) return;
+
+    const windowStart = Math.max(0, currentIndex - 3);
+    const windowEnd = Math.min(pages.length, currentIndex + 4);
+    const visiblePageIds = pages
+      .slice(windowStart, windowEnd)
+      .filter((page) => page.fileType.startsWith('image/'))
+      .map((page) => page.id);
+    void syncVisibleImages(visiblePageIds);
+  }, [currentIndex, pages, syncVisibleImages]);
 
   return (
     <div className="md-app">
@@ -384,14 +413,19 @@ function App() {
               )}
 
               <ImagePreview
-                images={imageUrls}
+                imageSrc={currentImageSrc}
+                fileType={currentPage?.fileType}
+                fileName={currentPage?.fileName}
+                totalImages={totalPages}
                 currentIndex={currentIndex >= 0 ? currentIndex : 0}
                 isLoading={isLoading}
                 canGoPrev={canGoPrev}
                 canGoNext={canGoNext}
                 onPrev={prevPage}
                 onNext={nextPage}
-                onClick={() => setShowModal(true)}
+                onClick={() => {
+                  if (currentImageSrc) setShowModal(true);
+                }}
                 onClear={handleClearAll}
               />
             </>

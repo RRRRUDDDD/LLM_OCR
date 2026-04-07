@@ -52,4 +52,58 @@ test.describe('Image Compression', () => {
     expect(result.mimeType).not.toBe('image/png');
     expect(result.outputBytes).toBeLessThan(result.inputBytes);
   });
+
+  test('reuses worker instances across sequential compression jobs', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const NativeWorker = window.Worker;
+      let createdWorkers = 0;
+
+      class CountingWorker extends NativeWorker {
+        constructor(url: string | URL, options?: WorkerOptions) {
+          super(url, options);
+          createdWorkers++;
+        }
+      }
+
+      Object.defineProperty(window, 'Worker', {
+        configurable: true,
+        writable: true,
+        value: CountingWorker,
+      });
+
+      try {
+        // @ts-expect-error Runtime-only Vite module import inside browser context.
+        const { default: compressImage } = await import('/src/utils/compressImage.ts');
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 300;
+        canvas.height = 300;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('2D canvas context unavailable');
+        ctx.fillStyle = '#0a7';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((value) => {
+            if (value) resolve(value);
+            else reject(new Error('Failed to build PNG test blob'));
+          }, 'image/png');
+        });
+
+        const file = new File([blob], 'reuse.png', { type: 'image/png' });
+        await compressImage(file);
+        await compressImage(file);
+
+        return { createdWorkers };
+      } finally {
+        Object.defineProperty(window, 'Worker', {
+          configurable: true,
+          writable: true,
+          value: NativeWorker,
+        });
+      }
+    });
+
+    expect(result.createdWorkers).toBe(1);
+  });
 });

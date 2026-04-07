@@ -7,11 +7,184 @@ function isWorkerSupported(): boolean {
 let workerSupported: boolean | null = null;
 let jobId = 0;
 
+interface PendingWorkerJob {
+  id: number;
+  file: File;
+  opts?: CompressOptions;
+  signal?: AbortSignal;
+  resolve: (result: CompressResult) => void;
+  reject: (error: Error) => void;
+}
+
+interface WorkerSlot {
+  worker: Worker;
+  currentJob: PendingWorkerJob | null;
+  abortHandler: (() => void) | null;
+}
+
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
   }
 }
+
+class CompressionWorkerPool {
+  private readonly slots: WorkerSlot[] = [];
+  private readonly pendingJobs: PendingWorkerJob[] = [];
+  private readonly maxWorkers: number;
+
+  constructor() {
+    const hardwareConcurrency = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 2 : 2;
+    this.maxWorkers = Math.max(1, Math.min(3, hardwareConcurrency));
+  }
+
+  private createWorker(): Worker {
+    return new Worker(new URL('./compressWorker.ts', import.meta.url), { type: 'module' });
+  }
+
+  private detachAbortHandler(slot: WorkerSlot): void {
+    if (slot.currentJob && slot.abortHandler) {
+      slot.currentJob.signal?.removeEventListener('abort', slot.abortHandler);
+    }
+    slot.abortHandler = null;
+  }
+
+  private attachWorkerEvents(slot: WorkerSlot): void {
+    slot.worker.onmessage = (event: MessageEvent<WorkerCompressResponse>) => {
+      const job = slot.currentJob;
+      if (!job || event.data.id !== job.id) return;
+
+      slot.currentJob = null;
+      this.detachAbortHandler(slot);
+
+      const { base64, mimeType, error } = event.data;
+      if (error) {
+        job.reject(new Error(error));
+      } else if (base64 && mimeType) {
+        job.resolve({ base64, mimeType });
+      } else {
+        job.reject(new Error('Worker returned an invalid payload'));
+      }
+
+      this.dispatchPendingJobs();
+    };
+
+    slot.worker.onerror = (event: ErrorEvent) => {
+      workerSupported = false;
+      const job = slot.currentJob;
+      slot.currentJob = null;
+      this.detachAbortHandler(slot);
+      if (job) {
+        job.reject(new Error('Worker error: ' + event.message));
+      }
+      this.terminateAllWorkers();
+      compressionWorkerPool = null;
+    };
+  }
+
+  private replaceWorker(slot: WorkerSlot): void {
+    slot.worker.terminate();
+    slot.worker = this.createWorker();
+    this.attachWorkerEvents(slot);
+  }
+
+  private terminateAllWorkers(): void {
+    for (const slot of this.slots) {
+      this.detachAbortHandler(slot);
+      slot.worker.terminate();
+      if (slot.currentJob) {
+        slot.currentJob.reject(new Error('Worker became unavailable'));
+        slot.currentJob = null;
+      }
+    }
+    this.slots.length = 0;
+
+    while (this.pendingJobs.length > 0) {
+      const job = this.pendingJobs.shift();
+      job?.reject(new Error('Worker became unavailable'));
+    }
+  }
+
+  private ensureWorkerSlot(): WorkerSlot | null {
+    if (this.slots.length >= this.maxWorkers) return null;
+
+    try {
+      const slot: WorkerSlot = {
+        worker: this.createWorker(),
+        currentJob: null,
+        abortHandler: null,
+      };
+      this.attachWorkerEvents(slot);
+      this.slots.push(slot);
+      return slot;
+    } catch {
+      workerSupported = false;
+      this.terminateAllWorkers();
+      compressionWorkerPool = null;
+      return null;
+    }
+  }
+
+  private dispatchPendingJobs(): void {
+    while (this.pendingJobs.length > 0) {
+      const slot = this.slots.find((entry) => entry.currentJob === null) ?? this.ensureWorkerSlot();
+      if (!slot) return;
+
+      const job = this.pendingJobs.shift();
+      if (!job) return;
+
+      if (job.signal?.aborted) {
+        job.reject(new DOMException('Aborted', 'AbortError'));
+        continue;
+      }
+
+      slot.currentJob = job;
+      const onAbort = () => {
+        if (slot.currentJob?.id !== job.id) return;
+        slot.currentJob = null;
+        this.detachAbortHandler(slot);
+        try {
+          this.replaceWorker(slot);
+        } catch {
+          workerSupported = false;
+          this.terminateAllWorkers();
+          compressionWorkerPool = null;
+        }
+        job.reject(new DOMException('Aborted', 'AbortError'));
+        this.dispatchPendingJobs();
+      };
+
+      slot.abortHandler = onAbort;
+      job.signal?.addEventListener('abort', onAbort, { once: true });
+
+      try {
+        slot.worker.postMessage({ id: job.id, file: job.file, opts: job.opts });
+      } catch (error) {
+        slot.currentJob = null;
+        this.detachAbortHandler(slot);
+        job.reject(error instanceof Error ? error : new Error('Failed to dispatch worker job'));
+        this.dispatchPendingJobs();
+      }
+    }
+  }
+
+  submit(file: File, opts?: CompressOptions, signal?: AbortSignal): Promise<CompressResult> {
+    throwIfAborted(signal);
+    return new Promise<CompressResult>((resolve, reject) => {
+      this.pendingJobs.push({
+        id: jobId++,
+        file,
+        opts,
+        signal,
+        resolve,
+        reject,
+      });
+      this.dispatchPendingJobs();
+    });
+  }
+}
+
+let compressionWorkerPool: CompressionWorkerPool | null = null;
 
 function compressViaWorker(file: File, opts?: CompressOptions, signal?: AbortSignal): Promise<CompressResult> | null {
   if (workerSupported === false || !isWorkerSupported()) {
@@ -20,52 +193,14 @@ function compressViaWorker(file: File, opts?: CompressOptions, signal?: AbortSig
   }
 
   try {
-    const worker = new Worker(new URL('./compressWorker.ts', import.meta.url), { type: 'module' });
+    if (!compressionWorkerPool) {
+      compressionWorkerPool = new CompressionWorkerPool();
+    }
     workerSupported = true;
-    const id = jobId++;
-
-    return new Promise<CompressResult>((resolve, reject) => {
-      let settled = false;
-
-      const cleanup = () => {
-        worker.onmessage = null;
-        worker.onerror = null;
-        signal?.removeEventListener('abort', onAbort);
-        worker.terminate();
-      };
-
-      const settle = (callback: () => void) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        callback();
-      };
-
-      const onAbort = () => {
-        settle(() => reject(new DOMException('Aborted', 'AbortError')));
-      };
-
-      worker.onmessage = (e: MessageEvent<WorkerCompressResponse>) => {
-        const { id: responseId, base64, mimeType, error } = e.data;
-        if (responseId !== id) return;
-        settle(() => {
-          if (error) reject(new Error(error));
-          else if (base64 && mimeType) resolve({ base64, mimeType });
-          else reject(new Error('Worker returned an invalid payload'));
-        });
-      };
-
-      worker.onerror = (e) => {
-        workerSupported = false;
-        settle(() => reject(new Error('Worker error: ' + e.message)));
-      };
-
-      throwIfAborted(signal);
-      signal?.addEventListener('abort', onAbort, { once: true });
-      worker.postMessage({ id, file, opts });
-    });
+    return compressionWorkerPool.submit(file, opts, signal);
   } catch {
     workerSupported = false;
+    compressionWorkerPool = null;
     return null;
   }
 }

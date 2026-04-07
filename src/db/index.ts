@@ -88,9 +88,8 @@ class OcrDatabase extends Dexie {
     });
   }
 
-
-  async saveImage(imageData: Partial<StoredPage>): Promise<string> {
-    const record: StoredPage = {
+  private async createStoredPageRecord(imageData: Partial<StoredPage>): Promise<StoredPage> {
+    return {
       id: imageData.id || generateId('img'),
       fileName: imageData.fileName || 'unknown',
       fileSize: imageData.fileSize || 0,
@@ -102,7 +101,41 @@ class OcrDatabase extends Dexie {
       createdAt: imageData.createdAt || new Date(),
       updatedAt: new Date(),
     };
+  }
+
+  toImageBlob(record?: ImageBlobRecord): Blob | undefined {
+    if (!record || !record.data) return undefined;
+    const data = record.data;
+    const mimeType = record.mimeType || (data instanceof Blob ? data.type : 'image/png');
+    if (data instanceof ArrayBuffer || (data && typeof data === 'object' && 'byteLength' in data)) {
+      return new Blob([data], { type: mimeType });
+    }
+    return data;
+  }
+
+
+  async saveImage(imageData: Partial<StoredPage>): Promise<string> {
+    const record = await this.createStoredPageRecord(imageData);
     await this.images.put(record);
+    return record.id;
+  }
+
+  async saveImageWithBlob(imageData: Partial<StoredPage>, blob: Blob): Promise<string> {
+    const record = await this.createStoredPageRecord(imageData);
+    let dataToSave: Blob | ArrayBuffer = blob;
+    if (isWebkit() && blob instanceof Blob) {
+      dataToSave = await blob.arrayBuffer();
+    }
+
+    await this.transaction('rw', this.images, this.imageBlobs, async () => {
+      await this.images.put(record);
+      await this.imageBlobs.put({
+        imageId: record.id,
+        data: dataToSave,
+        mimeType: blob.type || record.fileType || 'image/png',
+      });
+    });
+
     return record.id;
   }
 
@@ -116,17 +149,22 @@ class OcrDatabase extends Dexie {
 
   async getImageBlob(imageId: string): Promise<Blob | undefined> {
     const record = await this.imageBlobs.get(imageId);
-    if (!record || !record.data) return undefined;
-    const data = record.data;
-    const mimeType = record.mimeType || (data instanceof Blob ? data.type : 'image/png');
-    if (data instanceof ArrayBuffer || (data && typeof data === 'object' && 'byteLength' in data)) {
-      return new Blob([data], { type: mimeType });
-    }
-    return data;
+    return this.toImageBlob(record);
   }
 
   async updateImage(id: string, updates: Partial<StoredPage>): Promise<number> {
     return await this.images.update(id, { ...updates, updatedAt: new Date() });
+  }
+
+  async bulkUpdateImages(entries: Array<{ id: string; updates: Partial<StoredPage> }>): Promise<void> {
+    if (entries.length === 0) return;
+
+    await this.transaction('rw', this.images, async () => {
+      const timestamp = new Date();
+      await Promise.all(entries.map(({ id, updates }) => (
+        this.images.update(id, { ...updates, updatedAt: timestamp })
+      )));
+    });
   }
 
   async getImage(id: string): Promise<StoredPage | undefined> {
@@ -135,6 +173,10 @@ class OcrDatabase extends Dexie {
 
   async getAllImages(): Promise<StoredPage[]> {
     return await this.images.orderBy('order').toArray();
+  }
+
+  async getAllImageBlobs(): Promise<ImageBlobRecord[]> {
+    return await this.imageBlobs.toArray();
   }
 
   async deleteImage(id: string): Promise<void> {
@@ -168,14 +210,40 @@ class OcrDatabase extends Dexie {
     });
   }
 
+  async bulkSaveOcrResults(
+    entries: Array<{
+      imageId: string;
+      result: Pick<OcrResultRecord, 'text'> & Partial<Omit<OcrResultRecord, 'imageId' | 'text'>>;
+    }>
+  ): Promise<void> {
+    if (entries.length === 0) return;
+
+    await this.ocrResults.bulkPut(entries.map(({ imageId, result }) => ({
+      imageId,
+      text: result.text || '',
+      rawText: result.rawText || '',
+      status: result.status || 'done',
+      createdAt: result.createdAt || new Date(),
+    })));
+  }
+
   async getOcrResult(imageId: string): Promise<Omit<OcrResultRecord, 'imageId' | 'createdAt'> | undefined> {
     const record = await this.ocrResults.get(imageId);
     if (!record) return undefined;
     return { text: record.text, rawText: record.rawText, status: record.status };
   }
 
+  async getAllOcrResults(): Promise<OcrResultRecord[]> {
+    return await this.ocrResults.toArray();
+  }
+
   async deleteOcrResult(imageId: string): Promise<void> {
     await this.ocrResults.delete(imageId);
+  }
+
+  async bulkDeleteOcrResults(imageIds: string[]): Promise<void> {
+    if (imageIds.length === 0) return;
+    await this.ocrResults.bulkDelete(imageIds);
   }
 
   // ── Settings ──

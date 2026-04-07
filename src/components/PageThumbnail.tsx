@@ -44,6 +44,8 @@ const PageThumbnail = memo(function PageThumbnail({
   onCancel?: (pageId: string) => void;
 }) {
   const isProcessing = page.status === PAGE_STATUS.PROCESSING || page.status === PAGE_STATUS.QUEUED;
+  const thumbnailSrc = page.thumbnailUrl || page.imageUrl;
+  const placeholderIcon = page.fileType === 'application/pdf' ? 'picture_as_pdf' : 'image';
 
   return (
     <div
@@ -54,16 +56,16 @@ const PageThumbnail = memo(function PageThumbnail({
       aria-label={`${page.fileName} - ${STATUS_CONFIG[page.status]?.label || 'Unknown'}`}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(page); } }}
     >
-      {page.imageUrl ? (
+      {thumbnailSrc ? (
         <img
-          src={page.imageUrl}
+          src={thumbnailSrc}
           alt={page.fileName}
           className="page-thumbnail__img"
           loading="lazy"
         />
       ) : (
         <div className="page-thumbnail__placeholder">
-          <span className="material-icons-round">image</span>
+          <span className="material-icons-round">{placeholderIcon}</span>
         </div>
       )}
 
