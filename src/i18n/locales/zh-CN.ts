@@ -52,6 +52,7 @@ const zhCN = {
     baseUrl: 'API 地址',
     model: '模型名称',
     ocrLanguage: 'OCR 语言',
+    maxOutputTokens: '最大输出 Token',
     prompt: '系统提示词',
     save: '保存',
     saved: '配置已保存',

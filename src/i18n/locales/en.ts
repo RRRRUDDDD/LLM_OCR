@@ -52,6 +52,7 @@ const en = {
     baseUrl: 'API Base URL',
     model: 'Model Name',
     ocrLanguage: 'OCR Language',
+    maxOutputTokens: 'Max Output Tokens',
     prompt: 'System Prompt',
     save: 'Save',
     saved: 'Settings saved',

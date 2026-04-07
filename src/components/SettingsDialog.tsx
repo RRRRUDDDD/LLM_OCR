@@ -29,23 +29,27 @@ export const DEFAULT_API_CONFIG: ApiConfig = {
   model: 'gpt-5.4',
   prompt: DEFAULT_PROMPT,
   ocrLanguage: '',
+  maxOutputTokens: 8192,
 };
 
-const PROVIDER_PRESETS: Record<OcrProvider, Pick<ApiConfig, 'baseUrl' | 'model' | 'ocrLanguage'>> = {
+const PROVIDER_PRESETS: Record<OcrProvider, Pick<ApiConfig, 'baseUrl' | 'model' | 'ocrLanguage' | 'maxOutputTokens'>> = {
   openai_compatible: {
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-5.4',
     ocrLanguage: '',
+    maxOutputTokens: 8192,
   },
   gemini_native: {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     model: 'gemini-2.5-flash',
     ocrLanguage: '',
+    maxOutputTokens: 8192,
   },
   deepseek_ocr_api: {
     baseUrl: 'https://api.deepseek-ocr.ai/v1/ocr',
     model: '',
     ocrLanguage: 'auto',
+    maxOutputTokens: 8192,
   },
 };
 
@@ -66,6 +70,7 @@ function createProviderDraft(provider: OcrProvider): ApiConfig {
     baseUrl: preset.baseUrl,
     model: preset.model,
     ocrLanguage: preset.ocrLanguage,
+    maxOutputTokens: preset.maxOutputTokens,
   };
 }
 
@@ -121,6 +126,9 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
       model: form.provider === 'deepseek_ocr_api' ? '' : (form.model.trim() || preset.model || DEFAULT_API_CONFIG.model),
       prompt: form.prompt.trimEnd() || DEFAULT_API_CONFIG.prompt,
       ocrLanguage: form.provider === 'deepseek_ocr_api' ? (form.ocrLanguage?.trim() || preset.ocrLanguage || 'auto') : '',
+      maxOutputTokens: form.provider === 'deepseek_ocr_api'
+        ? preset.maxOutputTokens
+        : Math.max(1, Number(form.maxOutputTokens || preset.maxOutputTokens || DEFAULT_API_CONFIG.maxOutputTokens || 8192)),
     };
 
     const validationError = validateBaseUrl(trimmed.baseUrl);
@@ -282,6 +290,22 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
                 id="settings-ocr-language"
               />
               <label htmlFor="settings-ocr-language" className="md-text-field__label">{t('settings.ocrLanguage')}</label>
+            </div>
+          )}
+
+          {form.provider !== 'deepseek_ocr_api' && (
+            <div className="md-text-field">
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={form.maxOutputTokens || ''}
+                onChange={updateField('maxOutputTokens')}
+                placeholder=" "
+                className="md-text-field__input"
+                id="settings-max-output-tokens"
+              />
+              <label htmlFor="settings-max-output-tokens" className="md-text-field__label">{t('settings.maxOutputTokens')}</label>
             </div>
           )}
 

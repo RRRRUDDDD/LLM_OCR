@@ -67,7 +67,7 @@ function isDeepSeekOcrApi(apiConfig: ApiConfig): boolean {
 // ── Request Building ──
 
 export function buildRequest(apiConfig: ApiConfig, options: { file: File } | { base64: string; mimeType: string }): OcrRequestPayload {
-  const { baseUrl, apiKey, model, prompt, ocrLanguage } = apiConfig;
+  const { baseUrl, apiKey, model, prompt, ocrLanguage, maxOutputTokens = 8192 } = apiConfig;
 
   if (isDeepSeekOcrApi(apiConfig)) {
     if (!('file' in options)) {
@@ -110,7 +110,7 @@ export function buildRequest(apiConfig: ApiConfig, options: { file: File } | { b
             { text: prompt.includes('转录') ? '请按照系统指令严格转录上图中的全部文字，直接输出结果。' : 'Transcribe all text in the image following the system instructions.' },
           ],
         }],
-        generationConfig: { temperature: 0, maxOutputTokens: 16384 },
+        generationConfig: { temperature: 0, maxOutputTokens },
       }),
     };
   }
@@ -137,7 +137,7 @@ export function buildRequest(apiConfig: ApiConfig, options: { file: File } | { b
         },
       ],
       temperature: 0,
-      max_tokens: 16384,
+      max_tokens: maxOutputTokens,
     }),
   };
 }

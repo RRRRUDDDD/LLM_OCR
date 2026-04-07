@@ -7,6 +7,7 @@ export interface ApiConfig {
   model: string;
   prompt: string;
   ocrLanguage?: string;
+  maxOutputTokens?: number;
 }
 
 export interface OcrRequestPayload {
