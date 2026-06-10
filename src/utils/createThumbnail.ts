@@ -1,14 +1,7 @@
+import detectWebPSupport from './webpSupport';
+
 const DEFAULT_THUMBNAIL_SIZE = 160;
 const DEFAULT_QUALITY = 0.8;
-
-function pickThumbnailMimeType(): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
-  return canvas.toDataURL('image/webp', 0.5).startsWith('data:image/webp')
-    ? 'image/webp'
-    : 'image/jpeg';
-}
 
 export default async function createThumbnail(
   source: Blob,
@@ -41,7 +34,7 @@ export default async function createThumbnail(
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(image, 0, 0, width, height);
 
-    return canvas.toDataURL(pickThumbnailMimeType(), quality);
+    return canvas.toDataURL(detectWebPSupport() ? 'image/webp' : 'image/jpeg', quality);
   } finally {
     URL.revokeObjectURL(url);
   }

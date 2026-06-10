@@ -3,14 +3,33 @@ import {
   Paragraph,
   TextRun,
   HeadingLevel,
+  LevelFormat,
   PageBreak,
   Packer,
   AlignmentType,
-  type IParagraphOptions,
   type ParagraphChild,
 } from 'docx';
 import { downloadBlob, generateFilename } from './exportService';
 import type { Page } from '../types/page';
+
+// Ordered-list paragraphs reference 'default-numbering'; the Document must
+// define it, otherwise the generated .docx has broken/missing numbering.
+const NUMBERING_OPTIONS = {
+  config: [
+    {
+      reference: 'default-numbering',
+      levels: [
+        {
+          level: 0,
+          format: LevelFormat.DECIMAL,
+          text: '%1.',
+          alignment: AlignmentType.START,
+          style: { paragraph: { indent: { left: 720, hanging: 360 } } },
+        },
+      ],
+    },
+  ],
+};
 
 function parseInlineFormatting(text: string): ParagraphChild[] {
   const runs: ParagraphChild[] = [];
@@ -114,6 +133,7 @@ export async function exportPageAsDocx(page: Page): Promise<void> {
   ];
 
   const doc = new Document({
+    numbering: NUMBERING_OPTIONS,
     sections: [{ children: paragraphs }],
   });
 
@@ -142,6 +162,7 @@ export async function exportAllAsDocx(pages: Page[]): Promise<void> {
   });
 
   const doc = new Document({
+    numbering: NUMBERING_OPTIONS,
     sections: [{ children: allParagraphs }],
   });
 

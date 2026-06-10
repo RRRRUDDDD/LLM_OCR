@@ -29,6 +29,7 @@ const zhCN = {
     pendingWarning: '还有 {{count}} 张图片正在识别中，请稍等',
     recognizing: '识别中...',
     error: '识别出错,请重试 ({{message}})',
+    exportFailed: '导出失败，请重试',
   },
   export: {
     markdown: '导出 Markdown',

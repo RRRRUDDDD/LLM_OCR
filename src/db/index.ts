@@ -114,12 +114,6 @@ class OcrDatabase extends Dexie {
   }
 
 
-  async saveImage(imageData: Partial<StoredPage>): Promise<string> {
-    const record = await this.createStoredPageRecord(imageData);
-    await this.images.put(record);
-    return record.id;
-  }
-
   async saveImageWithBlob(imageData: Partial<StoredPage>, blob: Blob): Promise<string> {
     const record = await this.createStoredPageRecord(imageData);
     let dataToSave: Blob | ArrayBuffer = blob;
@@ -139,21 +133,9 @@ class OcrDatabase extends Dexie {
     return record.id;
   }
 
-  async saveImageBlob(imageId: string, blob: Blob): Promise<void> {
-    let dataToSave: Blob | ArrayBuffer = blob;
-    if (isWebkit() && blob instanceof Blob) {
-      dataToSave = await blob.arrayBuffer();
-    }
-    await this.imageBlobs.put({ imageId, data: dataToSave, mimeType: blob.type || 'image/png' });
-  }
-
   async getImageBlob(imageId: string): Promise<Blob | undefined> {
     const record = await this.imageBlobs.get(imageId);
     return this.toImageBlob(record);
-  }
-
-  async updateImage(id: string, updates: Partial<StoredPage>): Promise<number> {
-    return await this.images.update(id, { ...updates, updatedAt: new Date() });
   }
 
   async bulkUpdateImages(entries: Array<{ id: string; updates: Partial<StoredPage> }>): Promise<void> {
@@ -167,16 +149,13 @@ class OcrDatabase extends Dexie {
     });
   }
 
+  // Used by the e2e suite to inspect persisted state.
   async getImage(id: string): Promise<StoredPage | undefined> {
     return await this.images.get(id);
   }
 
   async getAllImages(): Promise<StoredPage[]> {
     return await this.images.orderBy('order').toArray();
-  }
-
-  async getAllImageBlobs(): Promise<ImageBlobRecord[]> {
-    return await this.imageBlobs.toArray();
   }
 
   async deleteImage(id: string): Promise<void> {
@@ -197,6 +176,7 @@ class OcrDatabase extends Dexie {
 
   // ── OCR Results ──
 
+  // Used by the e2e suite to seed persisted state.
   async saveOcrResult(
     imageId: string,
     result: Pick<OcrResultRecord, 'text'> & Partial<Omit<OcrResultRecord, 'imageId' | 'text'>>
@@ -227,18 +207,8 @@ class OcrDatabase extends Dexie {
     })));
   }
 
-  async getOcrResult(imageId: string): Promise<Omit<OcrResultRecord, 'imageId' | 'createdAt'> | undefined> {
-    const record = await this.ocrResults.get(imageId);
-    if (!record) return undefined;
-    return { text: record.text, rawText: record.rawText, status: record.status };
-  }
-
   async getAllOcrResults(): Promise<OcrResultRecord[]> {
     return await this.ocrResults.toArray();
-  }
-
-  async deleteOcrResult(imageId: string): Promise<void> {
-    await this.ocrResults.delete(imageId);
   }
 
   async bulkDeleteOcrResults(imageIds: string[]): Promise<void> {
@@ -246,22 +216,13 @@ class OcrDatabase extends Dexie {
     await this.ocrResults.bulkDelete(imageIds);
   }
 
-  // ── Settings ──
-
-  async saveSetting(key: string, value: unknown): Promise<void> {
-    await this.settings.put({ key, value });
-  }
-
-  async getSetting<T = unknown>(key: string): Promise<T | undefined> {
-    const record = await this.settings.get(key);
-    return record?.value as T | undefined;
-  }
-
   // ── Order Counter ──
 
   async getNextOrder(): Promise<number> {
-    const count = await this.images.count();
-    return count;
+    // Use max(order) + 1 instead of count(): after deletions, count() can
+    // collide with an existing order and make orderBy('order') unstable.
+    const last = await this.images.orderBy('order').last();
+    return typeof last?.order === 'number' ? last.order + 1 : 0;
   }
 }
 

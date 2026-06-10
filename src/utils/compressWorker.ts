@@ -60,7 +60,7 @@ async function compress(file: File, opts: CompressOptions = {}): Promise<Compres
   return { base64, mimeType };
 }
 
-/** ArrayBuffer → base64 字符串（Worker 中无 FileReader，用分块转换） */
+/** ArrayBuffer → base64 字符串（分块转换，避免大数组一次性展开导致调用栈溢出） */
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';

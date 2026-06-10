@@ -37,11 +37,13 @@ const PageThumbnail = memo(function PageThumbnail({
   isSelected,
   onClick,
   onCancel,
+  onDelete,
 }: {
   page: Page;
   isSelected: boolean;
   onClick: (page: Page) => void;
   onCancel?: (pageId: string) => void;
+  onDelete?: (pageId: string) => void;
 }) {
   const isProcessing = page.status === PAGE_STATUS.PROCESSING || page.status === PAGE_STATUS.QUEUED;
   const thumbnailSrc = page.thumbnailUrl || page.imageUrl;
@@ -82,6 +84,20 @@ const PageThumbnail = memo(function PageThumbnail({
           aria-label={`Cancel OCR for ${page.fileName}`}
         >
           <span className="material-icons-round" aria-hidden="true">close</span>
+        </button>
+      )}
+
+      {!isProcessing && onDelete && (
+        <button
+          className="page-thumbnail__cancel"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(page.id);
+          }}
+          title="Delete page"
+          aria-label={`Delete ${page.fileName}`}
+        >
+          <span className="material-icons-round" aria-hidden="true">delete</span>
         </button>
       )}
 

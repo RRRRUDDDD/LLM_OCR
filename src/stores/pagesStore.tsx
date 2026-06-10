@@ -93,13 +93,10 @@ export interface UsePagesResult {
   processingCount: number;
   completedCount: number;
   addPage: (file: File) => Promise<Page>;
-  addPages: (files: File[]) => Promise<Page[]>;
   deletePage: (id: string) => Promise<void>;
   clearAll: () => Promise<void>;
   selectPage: (id: string | null) => void;
-  goTo: (index: number) => void;
   loadFromDB: () => Promise<void>;
-  loadImageUrl: (pageId: string) => Promise<string | null>;
   syncVisibleImages: (pageIds: string[]) => Promise<void>;
   prevPage: () => void;
   nextPage: () => void;
@@ -376,14 +373,6 @@ export function usePages(): UsePagesResult {
     return page;
   }, [dispatch, objectUrlsRef]);
 
-  const addPages = useCallback(async (files: File[]): Promise<Page[]> => {
-    const newPages: Page[] = [];
-    for (const file of files) {
-      newPages.push(await addPage(file));
-    }
-    return newPages;
-  }, [addPage]);
-
   const deletePage = useCallback(async (id: string): Promise<void> => {
     const url = objectUrlsRef.current.get(id);
     if (url) {
@@ -405,10 +394,6 @@ export function usePages(): UsePagesResult {
 
   const selectPage = useCallback((id: string | null): void => {
     dispatch({ type: 'SELECT_PAGE', id });
-  }, [dispatch]);
-
-  const goTo = useCallback((index: number): void => {
-    dispatch({ type: 'SET_CURRENT_INDEX', index });
   }, [dispatch]);
 
   const loadFromDB = useCallback(async (): Promise<void> => {
@@ -474,31 +459,6 @@ export function usePages(): UsePagesResult {
     }
   }, [dispatch, objectUrlsRef]);
 
-  const loadImageUrl = useCallback(async (pageId: string): Promise<string | null> => {
-    const cached = objectUrlsRef.current.get(pageId);
-    if (cached) {
-      touchCachedImage(pageId);
-      return cached;
-    }
-
-    const pageIndex = state.pageIndexById[pageId];
-    if (pageIndex === undefined) return null;
-    const page = state.pages[pageIndex];
-    if (!isPreviewableFileType(page.fileType)) return null;
-
-    const blob = await db.getImageBlob(pageId);
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      objectUrlsRef.current.set(pageId, url);
-      touchCachedImage(pageId);
-      evictCachedImages(new Set([pageId]));
-      dispatch({ type: 'UPDATE_PAGE', id: pageId, updates: { imageUrl: url } });
-      return url;
-    }
-
-    return null;
-  }, [dispatch, evictCachedImages, objectUrlsRef, state.pageIndexById, state.pages, touchCachedImage]);
-
   const syncVisibleImages = useCallback(async (pageIds: string[]): Promise<void> => {
     const targetIds = new Set(pageIds.filter(Boolean));
 
@@ -547,13 +507,10 @@ export function usePages(): UsePagesResult {
     processingCount,
     completedCount,
     addPage,
-    addPages,
     deletePage,
     clearAll,
     selectPage,
-    goTo,
     loadFromDB,
-    loadImageUrl,
     syncVisibleImages,
     prevPage,
     nextPage,

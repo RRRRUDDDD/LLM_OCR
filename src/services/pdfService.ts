@@ -42,6 +42,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 const DEFAULT_SCALE = 2.0; // 144 DPI (2x of 72 DPI base)
+// JPEG instead of PNG: pdf.js renders on a white background by default, and
+// JPEG cuts IndexedDB storage to a fraction with no practical OCR impact.
+const PAGE_IMAGE_TYPE = 'image/jpeg';
+const PAGE_IMAGE_QUALITY = 0.92;
 
 export function isPdf(file: File): boolean {
   return (
@@ -58,7 +62,7 @@ async function renderPageToBlob(page: RenderablePdfPage, scale = DEFAULT_SCALE):
 
   await page.render({ canvasContext: ctx, viewport }).promise;
 
-  const blob = await canvas.convertToBlob({ type: 'image/png' });
+  const blob = await canvas.convertToBlob({ type: PAGE_IMAGE_TYPE, quality: PAGE_IMAGE_QUALITY });
   return { blob, width: viewport.width, height: viewport.height };
 }
 
@@ -78,7 +82,8 @@ async function renderPageToBlobFallback(page: RenderablePdfPage, scale = DEFAULT
         if (blob) resolve({ blob, width: viewport.width, height: viewport.height });
         else reject(new Error('Canvas toBlob returned null'));
       },
-      'image/png'
+      PAGE_IMAGE_TYPE,
+      PAGE_IMAGE_QUALITY
     );
   });
 }

@@ -29,6 +29,7 @@ const en = {
     pendingWarning: '{{count}} image(s) still processing, please wait',
     recognizing: 'Recognizing...',
     error: 'Recognition error, please retry ({{message}})',
+    exportFailed: 'Export failed, please try again',
   },
   export: {
     markdown: 'Export Markdown',

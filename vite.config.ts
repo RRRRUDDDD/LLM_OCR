@@ -11,11 +11,16 @@ export default defineConfig({
     target: 'es2020',
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          pdf: ['pdfjs-dist'],
-          markdown: ['react-markdown', 'remark-gfm', 'remark-math', 'rehype-katex', 'katex'],
-          docx: ['docx', 'file-saver'],
+        // Function form on purpose: the object form assigned shared modules
+        // (e.g. react/jsx-runtime) into the markdown chunk, forcing the entry
+        // to statically preload it. Everything except the react vendor chunk
+        // is left to Rollup, which already splits along dynamic imports
+        // (pdfService / docxService / MarkdownResult / KaTeXLine).
+        manualChunks(id: string) {
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) {
+            return 'vendor';
+          }
+          return undefined;
         },
       },
     },

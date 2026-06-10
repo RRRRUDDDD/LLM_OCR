@@ -1,4 +1,5 @@
 import type { CompressOptions, CompressResult, WorkerCompressResponse } from '../types/compress';
+import detectWebPSupport from './webpSupport';
 
 function isWorkerSupported(): boolean {
   return typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
@@ -205,17 +206,6 @@ function compressViaWorker(file: File, opts?: CompressOptions, signal?: AbortSig
   }
 }
 
-let webpSupported: boolean | null = null;
-
-function detectWebPSupport(): boolean {
-  if (webpSupported !== null) return webpSupported;
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
-  webpSupported = canvas.toDataURL('image/webp', 0.5).startsWith('data:image/webp');
-  return webpSupported;
-}
-
 function getPreferredMimeTypes(): string[] {
   return detectWebPSupport() ? ['image/webp', 'image/jpeg'] : ['image/jpeg'];
 }
@@ -275,7 +265,6 @@ function compressOnMainThread(file: File, opts: CompressOptions = {}, signal?: A
     img.onload = () => {
       if (settled) return;
       URL.revokeObjectURL(url);
-      throwIfAborted(signal);
 
       const needsResize = img.naturalWidth > maxDim || img.naturalHeight > maxDim;
       const needsCompress = file.size > threshold;

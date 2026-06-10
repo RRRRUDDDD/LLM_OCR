@@ -1,14 +1,11 @@
 import { memo, lazy, Suspense, useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import type { PageStatus } from '../types/page';
 import type { ExportFormat } from '../types/ui';
 
 const KaTeXLine = lazy(() => import('./KaTeXLine'));
+// Markdown + KaTeX rendering is heavy — load it only once a result is displayed
+const MarkdownResult = lazy(() => import('./MarkdownResult'));
 
 interface DropdownItem {
   key: ExportFormat;
@@ -21,10 +18,6 @@ interface TextLineProps {
   line: string;
   index: number;
   isStreaming: boolean;
-}
-
-interface MarkdownResultProps {
-  content: string;
 }
 
 interface DropdownMenuProps {
@@ -64,19 +57,6 @@ const TextLine = memo(function TextLine({ line, index, isStreaming }: TextLinePr
       ) : (
         line || '\u00A0'
       )}
-    </div>
-  );
-});
-
-const MarkdownResult = memo(function MarkdownResult({ content }: MarkdownResultProps) {
-  return (
-    <div className="markdown-result">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
-      >
-        {content}
-      </ReactMarkdown>
     </div>
   );
 });
@@ -260,7 +240,9 @@ export default function ResultPanel({
                   ))}
                 </div>
               ) : (
-                <MarkdownResult content={result} />
+                <Suspense fallback={<div className="markdown-result">{result}</div>}>
+                  <MarkdownResult content={result} />
+                </Suspense>
               )}
             </div>
           </div>

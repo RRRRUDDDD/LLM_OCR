@@ -9,7 +9,7 @@ import { queueManager } from './services/queueManager';
 import { fileAdditionQueue } from './utils/fileAdditionQueue';
 import { uiLogger } from './utils/logger';
 import { inferProviderFromConfig, type ApiConfig } from './types/api';
-import type { PageStatus } from './types/page';
+import type { Page, PageStatus } from './types/page';
 import type { ExportFormat } from './types/ui';
 
 const lazyPdf = () => import('./services/pdfService');
@@ -23,6 +23,8 @@ import ResultPanel from './components/ResultPanel';
 import SettingsDialog, { DEFAULT_API_CONFIG } from './components/SettingsDialog';
 import ImageModal from './components/ImageModal';
 import PageThumbnail from './components/PageThumbnail';
+import QueueStatus from './components/QueueStatus';
+import HealthIndicator from './components/HealthIndicator';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -35,7 +37,7 @@ function App() {
   const {
     pages, currentPage, currentIndex, selectedPageId,
     canGoPrev, canGoNext, totalPages, processingCount,
-    addPage, clearAll,
+    addPage, deletePage, clearAll,
     selectPage, loadFromDB, syncVisibleImages,
     prevPage, nextPage,
   } = usePages();
@@ -162,7 +164,8 @@ function App() {
 
     await extractPdfPages(file, {
       onPage: async (pdfPage) => {
-        const pageFile = new File([pdfPage.blob], `${pdfPage.fileName}.png`, { type: 'image/png' });
+        const ext = pdfPage.blob.type === 'image/jpeg' ? 'jpg' : 'png';
+        const pageFile = new File([pdfPage.blob], `${pdfPage.fileName}.${ext}`, { type: pdfPage.blob.type || 'image/png' });
         const page = await addPage(pageFile);
 
         if (shouldSelectFirstPage && !selectedAnyPage) {
@@ -194,7 +197,7 @@ function App() {
         showSnack(error instanceof Error ? error.message : 'Failed to process file', 'error');
       }
     });
-  }, [checkApiKey, addPage, selectPage, showSnack]);
+  }, [checkApiKey, addPage, handlePdfFile, selectPage, showSnack]);
 
   const handleSingleFileRef = useRef(handleSingleFile);
   useEffect(() => {
@@ -290,17 +293,22 @@ function App() {
 
   const handleExport = useCallback(async (format: ExportFormat): Promise<void> => {
     if (!currentPage) return;
-    if (format === 'md') {
-      const { exportPageAsMarkdown } = await lazyExport();
-      exportPageAsMarkdown(currentPage);
-    } else if (format === 'txt') {
-      const { exportPageAsText } = await lazyExport();
-      exportPageAsText(currentPage);
-    } else if (format === 'docx') {
-      const { exportPageAsDocx } = await lazyDocx();
-      await exportPageAsDocx(currentPage);
+    try {
+      if (format === 'md') {
+        const { exportPageAsMarkdown } = await lazyExport();
+        exportPageAsMarkdown(currentPage);
+      } else if (format === 'txt') {
+        const { exportPageAsText } = await lazyExport();
+        exportPageAsText(currentPage);
+      } else if (format === 'docx') {
+        const { exportPageAsDocx } = await lazyDocx();
+        await exportPageAsDocx(currentPage);
+      }
+    } catch (error: unknown) {
+      uiLogger.error('Export failed:', error);
+      showSnack(t('result.exportFailed'), 'error');
     }
-  }, [currentPage]);
+  }, [currentPage, showSnack, t]);
 
   const handleExportAll = useCallback(async (format: ExportFormat): Promise<void> => {
     if (processingCount > 0) {
@@ -308,21 +316,35 @@ function App() {
       return;
     }
 
-    if (format === 'md') {
-      const { exportAllAsMarkdown } = await lazyExport();
-      exportAllAsMarkdown(pages);
-    } else if (format === 'txt') {
-      const { exportAllAsText } = await lazyExport();
-      exportAllAsText(pages);
-    } else if (format === 'docx') {
-      const { exportAllAsDocx } = await lazyDocx();
-      await exportAllAsDocx(pages);
+    try {
+      if (format === 'md') {
+        const { exportAllAsMarkdown } = await lazyExport();
+        exportAllAsMarkdown(pages);
+      } else if (format === 'txt') {
+        const { exportAllAsText } = await lazyExport();
+        exportAllAsText(pages);
+      } else if (format === 'docx') {
+        const { exportAllAsDocx } = await lazyDocx();
+        await exportAllAsDocx(pages);
+      }
+    } catch (error: unknown) {
+      uiLogger.error('Export failed:', error);
+      showSnack(t('result.exportFailed'), 'error');
     }
   }, [pages, processingCount, showSnack, t]);
 
   const handleCancelOcr = useCallback((pageId: string): void => {
     queueManager.cancel(pageId);
   }, []);
+
+  const handleThumbnailClick = useCallback((page: Page): void => {
+    selectPage(page.id);
+  }, [selectPage]);
+
+  const handleDeletePage = useCallback(async (pageId: string): Promise<void> => {
+    queueManager.cancel(pageId);
+    await deletePage(pageId);
+  }, [deletePage]);
 
   const handleClearAll = useCallback((): void => {
     queueManager.cancelAll();
@@ -334,17 +356,28 @@ function App() {
   const currentStatus: PageStatus = currentPage?.status || PAGE_STATUS.IDLE;
   const currentImageSrc = currentPage?.imageUrl || '';
 
+  // Keep the latest syncVisibleImages without retriggering the effect below —
+  // the store recreates it on every state change (including 50ms stream ticks).
+  const syncVisibleImagesRef = useRef(syncVisibleImages);
   useEffect(() => {
-    if (currentIndex < 0) return;
+    syncVisibleImagesRef.current = syncVisibleImages;
+  }, [syncVisibleImages]);
 
+  const visiblePageIdsKey = useMemo(() => {
+    if (currentIndex < 0) return '';
     const windowStart = Math.max(0, currentIndex - 3);
     const windowEnd = Math.min(pages.length, currentIndex + 4);
-    const visiblePageIds = pages
+    return pages
       .slice(windowStart, windowEnd)
       .filter((page) => page.fileType.startsWith('image/'))
-      .map((page) => page.id);
-    void syncVisibleImages(visiblePageIds);
-  }, [currentIndex, pages, syncVisibleImages]);
+      .map((page) => page.id)
+      .join(',');
+  }, [currentIndex, pages]);
+
+  useEffect(() => {
+    if (!visiblePageIdsKey) return;
+    void syncVisibleImagesRef.current(visiblePageIdsKey.split(','));
+  }, [visiblePageIdsKey]);
 
   return (
     <div className="md-app">
@@ -352,6 +385,9 @@ function App() {
         <div className="md-top-app-bar__row">
           <span className="material-icons-round md-top-app-bar__nav-icon">document_scanner</span>
           <h1 className="md-top-app-bar__title">LLM OCR</h1>
+
+          <HealthIndicator />
+          <QueueStatus />
 
           <a
             className="md-icon-button"
@@ -405,8 +441,9 @@ function App() {
                       key={page.id}
                       page={page}
                       isSelected={page.id === selectedPageId}
-                      onClick={(selectedPage) => selectPage(selectedPage.id)}
+                      onClick={handleThumbnailClick}
                       onCancel={handleCancelOcr}
+                      onDelete={handleDeletePage}
                     />
                   ))}
                 </div>

@@ -33,26 +33,48 @@ function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-function createTimeoutSignal(parentSignal: AbortSignal, timeoutMs: number): { signal: AbortSignal; cleanup: () => void } {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+interface TimeoutSignalHandle {
+  signal: AbortSignal;
+  /** Restart the idle countdown — call whenever the request shows signs of life. */
+  reset: () => void;
+  /** True when the abort came from the timeout (not from user cancellation). */
+  timedOut: () => boolean;
+  cleanup: () => void;
+}
 
-  if (parentSignal) {
-    if (parentSignal.aborted) {
-      clearTimeout(timer);
+function createTimeoutSignal(parentSignal: AbortSignal, timeoutMs: number): TimeoutSignalHandle {
+  const controller = new AbortController();
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const onTimeout = () => {
+    timer = null;
+    timedOut = true;
+    controller.abort();
+  };
+
+  if (parentSignal.aborted) {
+    controller.abort();
+  } else {
+    timer = setTimeout(onTimeout, timeoutMs);
+    parentSignal.addEventListener('abort', () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
       controller.abort();
-    } else {
-      parentSignal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        controller.abort();
-      }, { once: true });
-    }
+    }, { once: true });
   }
 
-  // Return cleanup function alongside signal
   return {
     signal: controller.signal,
-    cleanup: () => clearTimeout(timer),
+    reset: () => {
+      if (timer === null || controller.signal.aborted) return;
+      clearTimeout(timer);
+      timer = setTimeout(onTimeout, timeoutMs);
+    },
+    timedOut: () => timedOut,
+    cleanup: () => {
+      if (timer !== null) clearTimeout(timer);
+    },
   };
 }
 
@@ -250,11 +272,12 @@ export function createProgressEmitter(imageId: string): OcrProgressEmitter {
 
 // ── Fetch with Smart Retry ──
 
-async function fetchWithSmartRetry(url: string, options: RequestInit, signal: AbortSignal): Promise<Response> {
+async function fetchWithSmartRetry(url: string, options: RequestInit, signal: AbortSignal, onAttempt?: () => void): Promise<Response> {
   let queueFullRetries = 0;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    onAttempt?.();
 
     try {
       const response = await fetch(url, { ...options, signal });
@@ -318,9 +341,14 @@ export function queueOcrTask(imageId: string, file: File, apiConfig: ApiConfig):
   if (!apiConfig.apiKey) return;
 
   queueManager.add(imageId, async (signal) => {
-    // Timeout protection: abort if no response within REQUEST_TIMEOUT_MS
-    const { signal: timeoutSignal, cleanup: cleanupTimeout } = createTimeoutSignal(signal, REQUEST_TIMEOUT_MS);
+    // Idle-timeout protection: abort if nothing happens for REQUEST_TIMEOUT_MS.
+    // The countdown restarts on every retry attempt and every streamed chunk,
+    // so long-but-alive responses are never killed mid-stream.
+    const timeout = createTimeoutSignal(signal, REQUEST_TIMEOUT_MS);
     const progressEmitter = createProgressEmitter(imageId);
+
+    const timeoutError = () =>
+      new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s without a response`);
 
     try {
       const deepSeekOcrApi = isDeepSeekOcrApi(apiConfig);
@@ -328,7 +356,7 @@ export function queueOcrTask(imageId: string, file: File, apiConfig: ApiConfig):
       const request = deepSeekOcrApi
         ? buildRequest(apiConfig, { file })
         : (() => {
-            const encodedPromise = compressImage(file, {}, timeoutSignal);
+            const encodedPromise = compressImage(file, {}, timeout.signal);
             return encodedPromise.then(({ base64, mimeType }) => buildRequest(apiConfig, { base64, mimeType }));
           })();
 
@@ -338,9 +366,12 @@ export function queueOcrTask(imageId: string, file: File, apiConfig: ApiConfig):
         method: 'POST',
         headers: { ...headers, 'X-Client-ID': getClientId() },
         body,
-      }, timeoutSignal);
+      }, timeout.signal, timeout.reset);
 
-      if (timeoutSignal.aborted) return;
+      if (timeout.signal.aborted) {
+        if (timeout.timedOut()) throw timeoutError();
+        return; // user cancellation — queueManager already emitted ocr:cancelled
+      }
 
       if (deepSeekOcrApi) {
         const responseText = await response.text();
@@ -360,9 +391,13 @@ export function queueOcrTask(imageId: string, file: File, apiConfig: ApiConfig):
       let chunkBuffer = '';
 
       while (true) {
-        if (timeoutSignal.aborted) return;
+        if (timeout.signal.aborted) {
+          if (timeout.timedOut()) throw timeoutError();
+          return;
+        }
         const { done, value } = await reader.read();
         if (done) break;
+        timeout.reset();
 
         const raw = decoder.decode(value, { stream: true });
         chunkBuffer += raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -393,15 +428,17 @@ export function queueOcrTask(imageId: string, file: File, apiConfig: ApiConfig):
       const finalText = ocrMatch ? ocrMatch[1].trim() : fullText;
 
       ocrEvents.emit('ocr:success', { imageId, text: finalText });
+    } catch (error: unknown) {
+      // A timeout abort surfaces as AbortError from fetch/reader — convert it to a
+      // regular error so queueManager emits ocr:error instead of swallowing it,
+      // which would leave the page stuck in "processing" forever.
+      if (error instanceof DOMException && error.name === 'AbortError' && timeout.timedOut() && !signal.aborted) {
+        throw timeoutError();
+      }
+      throw error;
     } finally {
       progressEmitter.cancel();
-      cleanupTimeout();
+      timeout.cleanup();
     }
   });
-}
-
-export function queueOcrBatch(imageIds: string[], files: File[], apiConfig: ApiConfig): void {
-  for (let i = 0; i < imageIds.length; i++) {
-    queueOcrTask(imageIds[i], files[i], apiConfig);
-  }
 }
