@@ -16,6 +16,10 @@
   --md-error: #B3261E;
   --md-on-error: #FFFFFF;
   --md-error-container: #F9DEDC;
+  --md-on-error-container: #410E0B;
+
+  --md-warning-container: #FFDF9E;
+  --md-on-warning-container: #271900;
 
   --md-surface: #FFFBFE;
   --md-surface-dim: #DED8E1;
@@ -88,6 +92,10 @@
   --md-error: #F2B8B5;
   --md-on-error: #601410;
   --md-error-container: #8C1D18;
+  --md-on-error-container: #F9DEDC;
+
+  --md-warning-container: #5B4300;
+  --md-on-warning-container: #FFDF9E;
 
   --md-background: #1C1B1F;
   --md-surface: #1C1B1F;

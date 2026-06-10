@@ -5,10 +5,10 @@ import { STATUS_HEALTHY, STATUS_DEGRADED, STATUS_UNAVAILABLE } from '../services
 import type { HealthStatus, OcrEventMap } from '../types/events';
 
 const STATUS_CONFIG = {
-  [STATUS_HEALTHY]:     { icon: 'wifi',     color: '#18a058', labelKey: 'health.connected' },
-  [STATUS_DEGRADED]:    { icon: 'wifi',     color: '#f0a000', labelKey: 'health.rateLimited' },
-  [STATUS_UNAVAILABLE]: { icon: 'wifi_off', color: '#d32f2f', labelKey: 'health.unavailable' },
-} as const satisfies Record<HealthStatus, { icon: string; color: string; labelKey: string }>;
+  [STATUS_HEALTHY]:     { icon: 'wifi',     modifier: 'healthy',     labelKey: 'health.connected' },
+  [STATUS_DEGRADED]:    { icon: 'wifi',     modifier: 'degraded',    labelKey: 'health.rateLimited' },
+  [STATUS_UNAVAILABLE]: { icon: 'wifi_off', modifier: 'unavailable', labelKey: 'health.unavailable' },
+} as const satisfies Record<HealthStatus, { icon: string; modifier: string; labelKey: string }>;
 
 const HealthIndicator = memo(function HealthIndicator() {
   const { t } = useTranslation();
@@ -26,9 +26,8 @@ const HealthIndicator = memo(function HealthIndicator() {
 
   return (
     <span
-      className="health-indicator"
+      className={`health-indicator health-indicator--${config.modifier}`}
       title={t(config.labelKey)}
-      style={{ '--health-color': config.color }}
     >
       <span className="material-icons-round health-indicator__icon" aria-hidden="true">
         {config.icon}
