@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type FormEvent, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import useFocusTrap from '../hooks/useFocusTrap';
-import type { ApiConfig, OcrProvider } from '../types/api';
+import type { ApiConfig, OcrProvider, PromptPreset } from '../types/api';
 
 const DEFAULT_PROMPT =
   '你是一个精确的 OCR 转录引擎。你的唯一任务是将图片中的文字原样转录。\n\n' +
@@ -22,14 +22,46 @@ const DEFAULT_PROMPT =
   '11. 将转录结果完整放置在 <ocr_text> 与 </ocr_text> 标签之间，标签外不输出任何内容。\n' +
   '现在请转录图片中的全部文字。';
 
+export const DEFAULT_BOOK_PROMPT =
+  '你是一个书籍数字化引擎，负责将书页图片转录为结构化 Markdown，用于生成电子书。\n\n' +
+  '## 排版规则\n' +
+  '1. **标题层级**：识别章节标题并使用 Markdown 标题语法（# 章标题、## 节标题、### 小节标题）。普通正文不得标记为标题。\n' +
+  '2. **段落重排**：将因书页排版断行的句子重新连接成完整自然段，段落之间用空行分隔；保留原文的段落划分。\n' +
+  '3. **列表与引用**：有序/无序列表使用 Markdown 列表语法，引用块使用 `>` 标记。\n' +
+  '4. **页眉页脚**：剔除页眉、页脚、页码，不要输出。\n' +
+  '5. **逐字忠实**：不改写、不润色、不翻译、不总结；完全无法辨认的字词用 [?] 占位。\n\n' +
+  '## 表格规则\n' +
+  '6. 表格使用 Markdown 表格语法（`| 列1 | 列2 |`），表头行后加 `|---|---|` 分隔行；合并单元格在对应位置重复填入相同内容。\n\n' +
+  '## 数学公式规则\n' +
+  '7. 数学公式使用 LaTeX 语法，行内公式用 `$...$`，独立公式用 `$$...$$`。\n\n' +
+  '## 插图规则\n' +
+  '8. **插图标记**：对页面中每一个插图、照片、图表、示意图区域，在其正文对应位置单独输出一行图片标记：\n' +
+  '   `![图注文字](figure://bbox?x1=120&y1=300&x2=880&y2=620)`\n' +
+  '   - x1,y1 为插图区域左上角坐标，x2,y2 为右下角坐标；\n' +
+  '   - 坐标为千分比整数：把页面宽和高各视为 1000，取 0-1000 之间的整数；\n' +
+  '   - 图注文字取插图下方或旁边的说明文字，没有图注则方括号留空；\n' +
+  '   - 纯装饰性花纹、背景底纹不要标记。\n' +
+  '9. 插图内部的文字不需要转录（图注除外）。\n\n' +
+  '## 输出格式\n' +
+  '10. 将转录结果完整放置在 <ocr_text> 与 </ocr_text> 标签之间，标签外不输出任何内容。\n' +
+  '现在请转录这一页书页图片。';
+
+export const PROMPT_PRESETS: Record<PromptPreset, string> = {
+  transcribe: DEFAULT_PROMPT,
+  book: DEFAULT_BOOK_PROMPT,
+};
+
 export const DEFAULT_API_CONFIG: ApiConfig = {
   provider: 'openai_compatible',
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: 'gpt-5.4',
   prompt: DEFAULT_PROMPT,
+  promptPreset: 'transcribe',
   ocrLanguage: '',
   maxOutputTokens: 8192,
+  concurrency: 3,
+  requestsPerMinute: 0,
 };
 
 const PROVIDER_PRESETS: Record<OcrProvider, Pick<ApiConfig, 'baseUrl' | 'model' | 'ocrLanguage' | 'maxOutputTokens'>> = {
@@ -119,16 +151,20 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
   const handleSubmit = useCallback((event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     const preset = PROVIDER_PRESETS[form.provider];
+    const promptPreset: PromptPreset = form.promptPreset || 'transcribe';
     const trimmed: ApiConfig = {
       provider: form.provider,
       baseUrl: form.baseUrl.trim() || preset.baseUrl,
       apiKey: form.apiKey.trim(),
       model: form.provider === 'deepseek_ocr_api' ? '' : (form.model.trim() || preset.model || DEFAULT_API_CONFIG.model),
-      prompt: form.prompt.trimEnd() || DEFAULT_API_CONFIG.prompt,
+      prompt: form.prompt.trimEnd() || PROMPT_PRESETS[promptPreset],
+      promptPreset,
       ocrLanguage: form.provider === 'deepseek_ocr_api' ? (form.ocrLanguage?.trim() || preset.ocrLanguage || 'auto') : '',
       maxOutputTokens: form.provider === 'deepseek_ocr_api'
         ? preset.maxOutputTokens
         : Math.max(1, Number(form.maxOutputTokens || preset.maxOutputTokens || DEFAULT_API_CONFIG.maxOutputTokens || 8192)),
+      concurrency: Math.max(1, Math.floor(Number(form.concurrency) || DEFAULT_API_CONFIG.concurrency || 3)),
+      requestsPerMinute: Math.max(0, Math.floor(Number(form.requestsPerMinute) || 0)),
     };
 
     const validationError = validateBaseUrl(trimmed.baseUrl);
@@ -172,6 +208,18 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
       return nextForm;
     });
     if (field === 'baseUrl') setUrlError(null);
+  }, []);
+
+  const handlePromptPresetChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const promptPreset = event.target.value as PromptPreset;
+    setForm((prev) => {
+      const nextForm = { ...prev, promptPreset, prompt: PROMPT_PRESETS[promptPreset] };
+      setProviderDrafts((drafts) => ({
+        ...drafts,
+        [nextForm.provider]: nextForm,
+      }));
+      return nextForm;
+    });
   }, []);
 
   const providerHelperKey:
@@ -307,6 +355,56 @@ export default function SettingsDialog({ isOpen, apiConfig, onSave, onClose }: S
               />
               <label htmlFor="settings-max-output-tokens" className="md-text-field__label">{t('settings.maxOutputTokens')}</label>
             </div>
+          )}
+
+          <div className="md-text-field">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={form.concurrency ?? ''}
+              onChange={updateField('concurrency')}
+              placeholder=" "
+              className="md-text-field__input"
+              id="settings-concurrency"
+            />
+            <label htmlFor="settings-concurrency" className="md-text-field__label">{t('settings.concurrency')}</label>
+          </div>
+
+          <div className="md-text-field">
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={form.requestsPerMinute ?? ''}
+              onChange={updateField('requestsPerMinute')}
+              placeholder=" "
+              className="md-text-field__input"
+              id="settings-requests-per-minute"
+              aria-describedby="settings-requests-per-minute-hint"
+            />
+            <label htmlFor="settings-requests-per-minute" className="md-text-field__label">{t('settings.requestsPerMinute')}</label>
+          </div>
+          <p id="settings-requests-per-minute-hint" className="settings-dialog__helper settings-dialog__helper--info" role="note">
+            {t('settings.requestsPerMinuteHint')}
+          </p>
+
+          <div className="md-text-field">
+            <select
+              value={form.promptPreset || 'transcribe'}
+              onChange={handlePromptPresetChange}
+              className="md-text-field__input"
+              id="settings-prompt-preset"
+            >
+              <option value="transcribe">{t('settings.presetTranscribe')}</option>
+              <option value="book">{t('settings.presetBook')}</option>
+            </select>
+            <label htmlFor="settings-prompt-preset" className="md-text-field__label">{t('settings.promptPreset')}</label>
+          </div>
+          {(form.promptPreset || 'transcribe') === 'book' && (
+            <p className="settings-dialog__helper settings-dialog__helper--info" role="note">
+              {t('settings.presetBookHint')}
+            </p>
           )}
 
           <div className="md-text-field md-text-field--textarea">

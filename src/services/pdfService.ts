@@ -28,12 +28,33 @@ export interface ExtractedPdfPage {
 export interface ExtractPdfOptions {
   scale?: number;
   signal?: AbortSignal;
+  /** 1-based page numbers to extract; omit to extract every page. */
+  pageNumbers?: number[];
   onPage?: (page: ExtractedPdfPage) => void | Promise<void>;
 }
 
 export interface ExtractPdfSummary {
   pageIds: string[];
   totalPages: number;
+}
+
+export interface RenderedPdfPage {
+  blob: Blob;
+  width: number;
+  height: number;
+}
+
+/**
+ * A handle over a loaded PDF document that renders individual pages on
+ * demand at any target width (thumbnails and large previews share it, so
+ * the file is parsed only once per dialog). Renders are serialized through
+ * an internal promise chain — pdf.js page objects must not be rendered and
+ * cleaned up concurrently.
+ */
+export interface PdfRenderSource {
+  totalPages: number;
+  renderPage: (pageNumber: number, targetWidth: number) => Promise<RenderedPdfPage>;
+  destroy: () => Promise<void>;
 }
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -88,30 +109,39 @@ async function renderPageToBlobFallback(page: RenderablePdfPage, scale = DEFAULT
   });
 }
 
+async function loadPdfDocument(file: File, signal?: AbortSignal): Promise<RenderablePdfDocument | null> {
+  const arrayBuffer = await file.arrayBuffer();
+  if (signal?.aborted) return null;
+  return await pdfjsLib.getDocument({ data: arrayBuffer }).promise as unknown as RenderablePdfDocument;
+}
+
 export async function extractPdfPages(file: File, options: ExtractPdfOptions = {}): Promise<ExtractPdfSummary> {
-  const { scale = DEFAULT_SCALE, signal, onPage } = options;
+  const { scale = DEFAULT_SCALE, signal, pageNumbers, onPage } = options;
   const fileName = file.name;
   let pdf: RenderablePdfDocument | null = null;
 
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    if (signal?.aborted) return { pageIds: [], totalPages: 0 };
-
-    pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise as unknown as RenderablePdfDocument;
+    pdf = await loadPdfDocument(file, signal);
+    if (!pdf) return { pageIds: [], totalPages: 0 };
     const totalPages = pdf.numPages;
 
-    ocrEvents.emit('pdf:start', { fileName, totalPages });
-    ocrLogger.info(`[PDF] Processing "${fileName}": ${totalPages} pages`);
+    const targets = pageNumbers
+      ? Array.from(new Set(pageNumbers)).filter((n) => n >= 1 && n <= totalPages).sort((a, b) => a - b)
+      : Array.from({ length: totalPages }, (_, i) => i + 1);
+
+    ocrEvents.emit('pdf:start', { fileName, totalPages: targets.length });
+    ocrLogger.info(`[PDF] Processing "${fileName}": ${targets.length}/${totalPages} pages`);
 
     const supportsOffscreen = typeof OffscreenCanvas !== 'undefined';
     const renderFn = supportsOffscreen ? renderPageToBlob : renderPageToBlobFallback;
 
     const pageIds: string[] = [];
 
-    for (let i = 1; i <= totalPages; i++) {
+    for (let i = 0; i < targets.length; i++) {
       if (signal?.aborted) break;
+      const pageNumber = targets[i];
 
-      const page = await pdf.getPage(i) as unknown as RenderablePdfPage;
+      const page = await pdf.getPage(pageNumber) as unknown as RenderablePdfPage;
       try {
         const { blob, width, height } = await renderFn(page, scale);
         const pageId = generateId('pdf');
@@ -120,21 +150,21 @@ export async function extractPdfPages(file: File, options: ExtractPdfOptions = {
           blob,
           width,
           height,
-          pageNumber: i,
-          fileName: `${fileName} - Page ${i}`,
+          pageNumber,
+          fileName: `${fileName} - Page ${pageNumber}`,
         };
 
         pageIds.push(pageId);
         await onPage?.(extractedPage);
 
         ocrEvents.emit('pdf:page:done', {
-          pageIndex: i - 1,
+          pageIndex: pageNumber - 1,
           pageId,
           blob,
           width,
           height,
         });
-        ocrEvents.emit('pdf:progress', { done: i, total: totalPages, fileName });
+        ocrEvents.emit('pdf:progress', { done: i + 1, total: targets.length, fileName });
       } finally {
         page.cleanup?.();
       }
@@ -142,7 +172,7 @@ export async function extractPdfPages(file: File, options: ExtractPdfOptions = {
 
     ocrEvents.emit('pdf:complete', {
       fileName,
-      totalPages,
+      totalPages: targets.length,
       pageIds,
     });
 
@@ -158,4 +188,43 @@ export async function extractPdfPages(file: File, options: ExtractPdfOptions = {
     await pdf?.cleanup?.();
     await pdf?.destroy?.();
   }
+}
+
+/**
+ * Open a PDF as an on-demand page render source for the selection dialog.
+ * Callers own the lifecycle and must call destroy().
+ */
+export async function createPdfRenderSource(file: File): Promise<PdfRenderSource> {
+  const pdf = await loadPdfDocument(file);
+  if (!pdf) throw new Error('PDF document failed to load');
+
+  const supportsOffscreen = typeof OffscreenCanvas !== 'undefined';
+  const renderFn = supportsOffscreen ? renderPageToBlob : renderPageToBlobFallback;
+
+  let chain: Promise<unknown> = Promise.resolve();
+
+  const renderPage = (pageNumber: number, targetWidth: number): Promise<RenderedPdfPage> => {
+    const task = chain.then(async () => {
+      const page = await pdf.getPage(pageNumber) as unknown as RenderablePdfPage;
+      try {
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = targetWidth / Math.max(1, baseViewport.width);
+        return await renderFn(page, scale);
+      } finally {
+        page.cleanup?.();
+      }
+    });
+    chain = task.catch(() => undefined);
+    return task;
+  };
+
+  return {
+    totalPages: pdf.numPages,
+    renderPage,
+    destroy: async () => {
+      await chain.catch(() => undefined);
+      await pdf.cleanup?.();
+      await pdf.destroy?.();
+    },
+  };
 }

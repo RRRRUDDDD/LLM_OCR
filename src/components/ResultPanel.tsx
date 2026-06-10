@@ -184,6 +184,7 @@ export default function ResultPanel({
       { key: 'md', icon: 'description', label: 'Markdown', onClick: () => onExportAll('md') },
       { key: 'txt', icon: 'text_snippet', label: 'Text', onClick: () => onExportAll('txt') },
       { key: 'docx', icon: 'article', label: 'Word', onClick: () => onExportAll('docx') },
+      { key: 'epub', icon: 'menu_book', label: 'EPUB', onClick: () => onExportAll('epub') },
     ];
   }, [onExportAll, totalImages]);
 

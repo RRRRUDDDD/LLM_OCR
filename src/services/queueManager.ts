@@ -5,14 +5,27 @@ import type { QueueStats } from '../types/queue';
 type QueueTask = (signal: AbortSignal) => Promise<void>;
 type HealthChecker = () => boolean;
 
+export interface QueueConfig {
+  concurrency?: number;
+  requestsPerMinute?: number;
+}
+
+export const DEFAULT_CONCURRENCY = 3;
+/** 0 disables rate limiting (legacy behavior). */
+export const DEFAULT_REQUESTS_PER_MINUTE = 0;
+const RATE_WINDOW_MS = 60_000;
+
 class QueueManager {
   private queue: PQueue;
   private activeControllers: Map<string, AbortController>;
   private pendingControllers: Map<string, AbortController>;
   private healthChecker?: HealthChecker;
+  private requestsPerMinute: number;
+  private startTimestamps: number[] = [];
 
-  constructor({ concurrency = 3 } = {}) {
+  constructor({ concurrency = DEFAULT_CONCURRENCY, requestsPerMinute = DEFAULT_REQUESTS_PER_MINUTE }: QueueConfig = {}) {
     this.queue = new PQueue({ concurrency });
+    this.requestsPerMinute = requestsPerMinute;
     this.activeControllers = new Map();   // imageId -> AbortController (running)
     this.pendingControllers = new Map();  // imageId -> AbortController (waiting)
 
@@ -23,6 +36,23 @@ class QueueManager {
     this.queue.on('idle', () => {
       this.emitStats();
     });
+  }
+
+  /** Apply user settings at runtime; in-flight tasks are unaffected. */
+  configure({ concurrency, requestsPerMinute }: QueueConfig): void {
+    if (typeof concurrency === 'number' && Number.isFinite(concurrency) && concurrency >= 1) {
+      this.queue.concurrency = Math.floor(concurrency);
+    }
+    if (typeof requestsPerMinute === 'number' && Number.isFinite(requestsPerMinute) && requestsPerMinute >= 0) {
+      this.requestsPerMinute = Math.floor(requestsPerMinute);
+    }
+  }
+
+  getConfig(): Required<QueueConfig> {
+    return {
+      concurrency: this.queue.concurrency,
+      requestsPerMinute: this.requestsPerMinute,
+    };
   }
 
   add(imageId: string, taskFn: QueueTask): void {
@@ -49,6 +79,13 @@ class QueueManager {
 
       // Wait for healthy service before proceeding
       await this.waitForHealthy(controller.signal);
+      if (controller.signal.aborted) {
+        this.activeControllers.delete(imageId);
+        return;
+      }
+
+      // Respect the user-configured requests-per-minute budget
+      await this.waitForRateSlot(controller.signal);
       if (controller.signal.aborted) {
         this.activeControllers.delete(imageId);
         return;
@@ -128,22 +165,47 @@ class QueueManager {
     return this.activeControllers.has(imageId) || this.pendingControllers.has(imageId);
   }
 
+  private delay(ms: number, signal: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
   private async waitForHealthy(signal: AbortSignal): Promise<void> {
     if (!this.healthChecker) return;
 
     const checkInterval = 2000;
     while (!this.healthChecker() && !signal.aborted) {
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(() => {
-          signal.removeEventListener('abort', onAbort);
-          resolve();
-        }, checkInterval);
-        const onAbort = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-        signal.addEventListener('abort', onAbort, { once: true });
-      });
+      await this.delay(checkInterval, signal);
+    }
+  }
+
+  /**
+   * Sliding-window rate limiter: a task may start only when fewer than
+   * `requestsPerMinute` tasks have started within the last 60 s. Aborted
+   * waiters return without consuming a slot.
+   */
+  private async waitForRateSlot(signal: AbortSignal): Promise<void> {
+    while (!signal.aborted) {
+      if (this.requestsPerMinute <= 0) return;
+
+      const now = Date.now();
+      this.startTimestamps = this.startTimestamps.filter((ts) => now - ts < RATE_WINDOW_MS);
+
+      if (this.startTimestamps.length < this.requestsPerMinute) {
+        this.startTimestamps.push(now);
+        return;
+      }
+
+      await this.delay(this.startTimestamps[0] + RATE_WINDOW_MS - now, signal);
     }
   }
 
@@ -156,4 +218,4 @@ class QueueManager {
   }
 }
 
-export const queueManager = new QueueManager({ concurrency: 3 });
+export const queueManager = new QueueManager({ concurrency: DEFAULT_CONCURRENCY });

@@ -1,6 +1,7 @@
 import { ocrEvents } from '../events/ocrEvents';
 import { queueManager } from './queueManager';
 import { healthChecker } from './healthCheck';
+import { processFigureMarkers } from './figureExtraction';
 import { ocrLogger } from '../utils/logger';
 import { getClientId } from '../utils/clientId';
 import compressImage from '../utils/compressImage';
@@ -376,7 +377,7 @@ export function queueOcrTask(imageId: string, file: File, apiConfig: ApiConfig):
       if (deepSeekOcrApi) {
         const responseText = await response.text();
         const text = parseDeepSeekOcrResponse(responseText);
-        ocrEvents.emit('ocr:success', { imageId, text });
+        ocrEvents.emit('ocr:success', { imageId, text: await processFigureMarkers(imageId, text) });
         return;
       }
 
@@ -427,7 +428,11 @@ export function queueOcrTask(imageId: string, file: File, apiConfig: ApiConfig):
       const ocrMatch = fullText.match(/<ocr_text>([\s\S]*?)<\/ocr_text>/);
       const finalText = ocrMatch ? ocrMatch[1].trim() : fullText;
 
-      ocrEvents.emit('ocr:success', { imageId, text: finalText });
+      // Book mode: crop figure bboxes out of the page image and rewrite
+      // markers to stable figure:// references (no-op without markers).
+      const processedText = await processFigureMarkers(imageId, finalText);
+
+      ocrEvents.emit('ocr:success', { imageId, text: processedText });
     } catch (error: unknown) {
       // A timeout abort surfaces as AbortError from fetch/reader — convert it to a
       // regular error so queueManager emits ocr:error instead of swallowing it,

@@ -15,12 +15,14 @@ import type { ExportFormat } from './types/ui';
 const lazyPdf = () => import('./services/pdfService');
 const lazyExport = () => import('./services/exportService');
 const lazyDocx = () => import('./services/docxService');
+const lazyEpub = () => import('./services/epubService');
 
 import useSnackbar from './hooks/useSnackbar';
 import UploadZone from './components/UploadZone';
 import ImagePreview from './components/ImagePreview';
 import ResultPanel from './components/ResultPanel';
 import SettingsDialog, { DEFAULT_API_CONFIG } from './components/SettingsDialog';
+import PdfPageSelectDialog from './components/PdfPageSelectDialog';
 import ImageModal from './components/ImageModal';
 import PageThumbnail from './components/PageThumbnail';
 import QueueStatus from './components/QueueStatus';
@@ -62,6 +64,9 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [pastedUrl, setPastedUrl] = useState('');
+  // PDF awaiting page selection; `resolve` hands the user's choice (null = cancelled)
+  // back to the awaiting handlePdfFile call inside the file-addition queue.
+  const [pdfSelection, setPdfSelection] = useState<{ file: File; resolve: (pages: number[] | null) => void } | null>(null);
 
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
@@ -96,6 +101,14 @@ function App() {
   useEffect(() => {
     loadFromDB();
   }, [loadFromDB]);
+
+  // Push user-configured throttling into the OCR queue (initial load + settings saves)
+  useEffect(() => {
+    queueManager.configure({
+      concurrency: apiConfig.concurrency,
+      requestsPerMinute: apiConfig.requestsPerMinute,
+    });
+  }, [apiConfig.concurrency, apiConfig.requestsPerMinute]);
 
   useEffect(() => {
     if (!apiConfig.apiKey) setShowSettings(true);
@@ -149,6 +162,10 @@ function App() {
     return true;
   }, [apiConfig.apiKey, showSnack, t]);
 
+  const requestPdfPageSelection = useCallback((file: File): Promise<number[] | null> => {
+    return new Promise((resolve) => setPdfSelection({ file, resolve }));
+  }, []);
+
   const handlePdfFile = useCallback(async (file: File, shouldSelectFirstPage: boolean): Promise<boolean> => {
     if (apiConfigRef.current.provider === 'deepseek_ocr_api') {
       const page = await addPage(file);
@@ -159,14 +176,19 @@ function App() {
       return shouldSelectFirstPage;
     }
 
+    // Let the user pick which pages to OCR before the full-resolution render
+    const selectedPages = await requestPdfPageSelection(file);
+    if (!selectedPages || selectedPages.length === 0) return false;
+
     const { extractPdfPages } = await lazyPdf();
     let selectedAnyPage = false;
 
     await extractPdfPages(file, {
+      pageNumbers: selectedPages,
       onPage: async (pdfPage) => {
         const ext = pdfPage.blob.type === 'image/jpeg' ? 'jpg' : 'png';
         const pageFile = new File([pdfPage.blob], `${pdfPage.fileName}.${ext}`, { type: pdfPage.blob.type || 'image/png' });
-        const page = await addPage(pageFile);
+        const page = await addPage(pageFile, { sourceFile: file.name, pageNumber: pdfPage.pageNumber });
 
         if (shouldSelectFirstPage && !selectedAnyPage) {
           selectPage(page.id);
@@ -178,7 +200,7 @@ function App() {
     });
 
     return selectedAnyPage;
-  }, [addPage, selectPage]);
+  }, [addPage, selectPage, requestPdfPageSelection]);
 
   const handleSingleFile = useCallback(async (file: File): Promise<void> => {
     if (!checkApiKey()) return;
@@ -261,9 +283,12 @@ function App() {
     const toStore: Partial<ApiConfig> & Pick<ApiConfig, 'apiKey'> = { ...config };
     if (toStore.provider === DEFAULT_API_CONFIG.provider) delete toStore.provider;
     if (toStore.prompt === DEFAULT_API_CONFIG.prompt) delete toStore.prompt;
+    if (toStore.promptPreset === DEFAULT_API_CONFIG.promptPreset) delete toStore.promptPreset;
     if (toStore.baseUrl === DEFAULT_API_CONFIG.baseUrl) delete toStore.baseUrl;
     if (toStore.model === DEFAULT_API_CONFIG.model) delete toStore.model;
     if (toStore.ocrLanguage === DEFAULT_API_CONFIG.ocrLanguage) delete toStore.ocrLanguage;
+    if (toStore.concurrency === DEFAULT_API_CONFIG.concurrency) delete toStore.concurrency;
+    if (toStore.requestsPerMinute === DEFAULT_API_CONFIG.requestsPerMinute) delete toStore.requestsPerMinute;
     localStorage.setItem('ocr-api-config', JSON.stringify(toStore));
     setShowSettings(false);
     showSnack(t('settings.saved'));
@@ -326,6 +351,13 @@ function App() {
       } else if (format === 'docx') {
         const { exportAllAsDocx } = await lazyDocx();
         await exportAllAsDocx(pages);
+      } else if (format === 'epub') {
+        const { exportAllAsEpub } = await lazyEpub();
+        const count = await exportAllAsEpub(pages, {
+          untitledTitle: t('export.untitledBook'),
+          language: navigator.language || 'zh',
+        });
+        showSnack(t('result.epubExported', { count }));
       }
     } catch (error: unknown) {
       uiLogger.error('Export failed:', error);
@@ -495,6 +527,20 @@ function App() {
         onSave={handleSaveSettings}
         onClose={() => setShowSettings(false)}
       />
+
+      {pdfSelection && (
+        <PdfPageSelectDialog
+          file={pdfSelection.file}
+          onConfirm={(pages) => {
+            pdfSelection.resolve(pages);
+            setPdfSelection(null);
+          }}
+          onCancel={() => {
+            pdfSelection.resolve(null);
+            setPdfSelection(null);
+          }}
+        />
+      )}
 
       {snackbarVisible && (
         <div

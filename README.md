@@ -9,6 +9,7 @@
 - **流式实时输出** — OpenAI / Gemini 路径通过 SSE 流式返回识别结果，逐字显示
 - **多图批量处理** — 支持同时上传多张图片，基于 p-queue 任务队列自动管理并发
 - **PDF 支持** — OpenAI / Gemini 路径自动逐页提取；DeepSeek-OCR 路径直接上传原始 PDF 文件
+- **PDF 页面选择** — 上传 PDF 后弹出双栏选择器：左侧小缩略图网格一屏纵览更多页，右侧常驻高分辨率大图预览（纵向滚动不压缩），按钮或方向键即可上下翻页并直接勾选；支持全选 / 清空 / 反选 / 奇偶页 / 范围输入（如 `1-5, 8, 10-12`）/ Shift 区间多选
 - **智能重试** — 429 / 5xx / 网络错误自动指数退避重试，尊重 `Retry-After` 响应头
 - **队列满感知** — 检测服务端队列饱和后智能退避，最多重试 10 次
 - **健康监控** — 根据 API 响应状态跟踪可用性（正常 / 降级 / 不可用），任务队列自动暂停和恢复
@@ -20,6 +21,7 @@
 - **逐图状态追踪** — 缩略图条显示每张图片的独立状态徽章（排队中 / 处理中 / 完成 / 错误），支持单页删除
 - **Markdown 渲染** — 识别结果支持 GFM Markdown 渲染（表格、代码块、列表等）
 - **LaTeX 公式渲染** — 识别结果中的数学公式通过 KaTeX 实时渲染
+- **书籍模式 + EPUB 导出** — 书籍模式提示词预设让模型输出结构化 Markdown（章节标题 / 段落 / 表格 / 公式）并标注插图位置；插图按模型给出的 bbox 从页面图裁剪入库，导出时按源 PDF 分书、按一级标题分章，生成含插图与 MathML 公式的 EPUB 3 电子书
 - **客户端图片压缩** — Web Worker + OffscreenCanvas 后台压缩，不阻塞主线程；不支持时自动回退
 - **批量持久化写入** — OCR 状态写入经缓冲后批量落库，减少高频 IndexedDB 压力
 
@@ -39,6 +41,7 @@ https://ocr.yoshinagakoi.eu.org/
 | 事件总线 | mitt | 服务层与 UI 层解耦通信 |
 | PDF 处理 | pdfjs-dist | PDF 页面提取 |
 | 文档导出 | docx, file-saver | Word 文档生成与下载 |
+| 电子书导出 | jszip, unified (remark/rehype) | EPUB 3 打包与 Markdown → XHTML 转换 |
 | 数学渲染 | KaTeX | 数学公式渲染 |
 
 ## 项目结构
@@ -63,6 +66,9 @@ src/
 |   +-- pdfService.ts            # PDF 页面提取
 |   +-- exportService.ts         # Markdown / 纯文本导出
 |   +-- docxService.ts           # Word 文档导出
+|   +-- epubService.ts           # EPUB 3 电子书导出
+|   +-- markdownToXhtml.ts       # Markdown → XHTML 转换
+|   +-- figureExtraction.ts      # 书籍模式插图 bbox 解析与裁剪入库
 +-- components/
 |   +-- UploadZone.tsx           # 上传区
 |   +-- ImagePreview.tsx         # 图片 / PDF 预览与导航
@@ -70,6 +76,7 @@ src/
 |   +-- ResultPanel.tsx          # 识别结果 + 复制/导出下拉菜单
 |   +-- MarkdownResult.tsx       # Markdown 渲染器
 |   +-- SettingsDialog.tsx       # API 配置弹窗
+|   +-- PdfPageSelectDialog.tsx  # PDF 页面选择弹窗
 |   +-- PageThumbnail.tsx        # 带状态徽章的缩略图
 |   +-- HealthIndicator.tsx      # 顶栏健康状态指示器
 |   +-- QueueStatus.tsx          # 队列任务计数器
@@ -86,6 +93,8 @@ src/
 |   +-- fetchImageFromUrl.ts     # URL 图片加载
 |   +-- clientId.ts              # 持久化客户端 UUID
 |   +-- exifFix.ts               # EXIF 方向自动修正
+|   +-- cropImage.ts             # bbox 区域裁剪
+|   +-- parsePageRange.ts        # 页码范围表达式解析
 |   +-- browser.ts               # 浏览器检测
 |   +-- fileAdditionQueue.ts     # 文件添加序列化
 |   +-- logger.ts                # consola 带标签日志
@@ -218,10 +227,11 @@ IndexedDB (Dexie.js) <--- pagePersistence（批量持久化缓冲）
 
 ## 注意事项
 
-- **并发控制**：任务队列默认最大并发数为 3，遇到限流时会自动退避
+- **并发控制**：任务队列默认最大并发数为 3，可在设置中调整"并发数"与"每分钟最大请求数"（0 表示不限速）以匹配 API 套餐限额；遇到限流时仍会自动退避
 - **图片压缩**：OpenAI / Gemini 路径下，超过 2048px 分辨率或 1MB 时自动压缩后再上传；DeepSeek-OCR 路径直传原始文件
-- **PDF 行为**：OpenAI / Gemini 路径会拆页后逐页识别（页面以 JPEG 渲染存储，降低本地占用）；DeepSeek-OCR 路径会直接上传整份 PDF 文件
-- **代码分割**：PDF 服务、导出服务、DOCX 生成器、Markdown / KaTeX 渲染层均为懒加载，首次使用时才下载
+- **PDF 行为**：OpenAI / Gemini 路径会先弹出页面选择器（默认全选，可取消跳过该文件），确认后拆页逐页识别（页面以 JPEG 渲染存储，降低本地占用）；DeepSeek-OCR 路径会直接上传整份 PDF 文件，不经过页面选择
+- **代码分割**：PDF 服务、导出服务、DOCX 生成器、EPUB 生成器、Markdown / KaTeX 渲染层均为懒加载，首次使用时才下载
+- **EPUB 导出**：依赖书籍模式（设置 → 提示词预设 → 书籍模式）识别出的结构化 Markdown 与插图标记；多本 PDF 会分别导出独立的 .epub，公式以 MathML 嵌入，无需打包字体；同时内置 nav.xhtml（EPUB 3）与 toc.ncx（EPUB 2 兼容）双目录，老阅读器也能正常显示
 - **URL 协议**：仅支持 `https:` / `http:` / `data:` 协议，不支持本地 `file:` 路径
 - **跨域限制**：通过 URL 加载图片受浏览器 CORS 策略约束；若目标服务器未开放跨域，建议直接上传文件
 

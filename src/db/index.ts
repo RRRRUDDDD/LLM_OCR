@@ -1,6 +1,6 @@
 import Dexie, { type Table, type Transaction } from 'dexie';
 import { isWebkit } from '../utils/browser';
-import type { ImageBlobRecord, OcrResultRecord, SettingRecord, StoredPage } from '../types/page';
+import type { FigureRecord, ImageBlobRecord, OcrResultRecord, SettingRecord, StoredPage } from '../types/page';
 
 type LegacyOcrRecord = OcrResultRecord & { _imageBlob?: Blob | ArrayBuffer };
 type LegacyImageBlobRecord = ImageBlobRecord & { mimeType?: string };
@@ -19,6 +19,7 @@ class OcrDatabase extends Dexie {
   ocrResults!: Table<OcrResultRecord, string>;
   imageBlobs!: Table<ImageBlobRecord, string>;
   settings!: Table<SettingRecord, string>;
+  figures!: Table<FigureRecord, string>;
 
   constructor() {
     super('LLM_OCR');
@@ -86,6 +87,15 @@ class OcrDatabase extends Dexie {
         await tx.table<ImageBlobRecord, string>('imageBlobs').bulkPut(patched);
       }
     });
+
+    // v4: figures table for illustrations cropped from book pages (bbox from VLM)
+    this.version(4).stores({
+      images:     'id, fileName, status, order, createdAt',
+      ocrResults: 'imageId',
+      imageBlobs: 'imageId',
+      settings:   'key',
+      figures:    'id, pageId',
+    });
   }
 
   private async createStoredPageRecord(imageData: Partial<StoredPage>): Promise<StoredPage> {
@@ -98,9 +108,16 @@ class OcrDatabase extends Dexie {
       ocrText: imageData.ocrText || '',
       thumbnailUrl: imageData.thumbnailUrl || '',
       order: imageData.order ?? await this.getNextOrder(),
+      sourceFile: imageData.sourceFile,
+      pageNumber: imageData.pageNumber,
       createdAt: imageData.createdAt || new Date(),
       updatedAt: new Date(),
     };
+  }
+
+  // Safari/WebKit can corrupt Blobs persisted in IndexedDB — store ArrayBuffers there.
+  private async toStorableData(blob: Blob): Promise<Blob | ArrayBuffer> {
+    return isWebkit() ? await blob.arrayBuffer() : blob;
   }
 
   toImageBlob(record?: ImageBlobRecord): Blob | undefined {
@@ -116,10 +133,7 @@ class OcrDatabase extends Dexie {
 
   async saveImageWithBlob(imageData: Partial<StoredPage>, blob: Blob): Promise<string> {
     const record = await this.createStoredPageRecord(imageData);
-    let dataToSave: Blob | ArrayBuffer = blob;
-    if (isWebkit() && blob instanceof Blob) {
-      dataToSave = await blob.arrayBuffer();
-    }
+    const dataToSave = await this.toStorableData(blob);
 
     await this.transaction('rw', this.images, this.imageBlobs, async () => {
       await this.images.put(record);
@@ -159,19 +173,49 @@ class OcrDatabase extends Dexie {
   }
 
   async deleteImage(id: string): Promise<void> {
-    await this.transaction('rw', this.images, this.ocrResults, this.imageBlobs, async () => {
+    await this.transaction('rw', this.images, this.ocrResults, this.imageBlobs, this.figures, async () => {
       await this.images.delete(id);
       await this.ocrResults.delete(id);
       await this.imageBlobs.delete(id);
+      await this.figures.where('pageId').equals(id).delete();
     });
   }
 
   async deleteAllImages(): Promise<void> {
-    await this.transaction('rw', this.images, this.ocrResults, this.imageBlobs, async () => {
+    await this.transaction('rw', this.images, this.ocrResults, this.imageBlobs, this.figures, async () => {
       await this.images.clear();
       await this.ocrResults.clear();
       await this.imageBlobs.clear();
+      await this.figures.clear();
     });
+  }
+
+  // ── Figures ──
+
+  /** Replace all figures of a page atomically (idempotent on re-OCR). */
+  async replaceFiguresForPage(pageId: string, figures: Array<Omit<FigureRecord, 'data'> & { blob: Blob }>): Promise<void> {
+    const records: FigureRecord[] = await Promise.all(figures.map(async ({ blob, ...rest }) => ({
+      ...rest,
+      data: await this.toStorableData(blob),
+    })));
+
+    await this.transaction('rw', this.figures, async () => {
+      await this.figures.where('pageId').equals(pageId).delete();
+      if (records.length > 0) {
+        await this.figures.bulkPut(records);
+      }
+    });
+  }
+
+  async getFiguresByPageIds(pageIds: string[]): Promise<FigureRecord[]> {
+    if (pageIds.length === 0) return [];
+    return await this.figures.where('pageId').anyOf(pageIds).toArray();
+  }
+
+  toFigureBlob(record: FigureRecord): Blob {
+    const data = record.data;
+    if (data instanceof Blob) return data;
+    return new Blob([data], { type: record.mimeType || 'image/jpeg' });
   }
 
   // ── OCR Results ──

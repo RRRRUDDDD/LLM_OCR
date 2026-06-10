@@ -81,6 +81,11 @@ interface PagesContextValue {
   objectUrlsRef: MutableRefObject<Map<string, string>>;
 }
 
+export interface AddPageMeta {
+  sourceFile?: string;
+  pageNumber?: number;
+}
+
 export interface UsePagesResult {
   pages: Page[];
   currentPage: Page | null;
@@ -92,7 +97,7 @@ export interface UsePagesResult {
   totalPages: number;
   processingCount: number;
   completedCount: number;
-  addPage: (file: File) => Promise<Page>;
+  addPage: (file: File, meta?: AddPageMeta) => Promise<Page>;
   deletePage: (id: string) => Promise<void>;
   clearAll: () => Promise<void>;
   selectPage: (id: string | null) => void;
@@ -335,7 +340,7 @@ export function usePages(): UsePagesResult {
     }
   }, [dispatch, objectUrlsRef]);
 
-  const addPage = useCallback(async (file: File): Promise<Page> => {
+  const addPage = useCallback(async (file: File, meta?: AddPageMeta): Promise<Page> => {
     const id = generateId('img');
     const previewable = isPreviewableFileType(file.type);
     const objectUrl = previewable ? URL.createObjectURL(file) : '';
@@ -358,6 +363,8 @@ export function usePages(): UsePagesResult {
       ocrText: '',
       imageUrl: objectUrl,
       thumbnailUrl,
+      sourceFile: meta?.sourceFile,
+      pageNumber: meta?.pageNumber,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
