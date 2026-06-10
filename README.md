@@ -12,12 +12,13 @@
 - **智能重试** — 429 / 5xx / 网络错误自动指数退避重试，尊重 `Retry-After` 响应头
 - **队列满感知** — 检测服务端队列饱和后智能退避，最多重试 10 次
 - **健康监控** — 根据 API 响应状态跟踪可用性（正常 / 降级 / 不可用），任务队列自动暂停和恢复
-- **请求超时保护** — 每个请求 90 秒超时，防止队列死锁
+- **请求超时保护** — 90 秒无响应自动中止并标记为错误（可重试），重试与流式输出期间自动续期，长输出不会被误杀
 - **IndexedDB 持久化** — 通过 Dexie.js 存入浏览器数据库，刷新页面后仍可恢复，兼容 WebKit / Safari
 - **恢复优化** — 历史数据恢复时按需加载大图，并使用小型 LRU 缓存 object URL，避免一次性占满内存
 - **缩略图持久化** — 缩略图持久化保存，缺失时后台受控并发补齐
 - **EXIF 方向修正** — 自动检测并修正手机拍照的旋转方向
-- **逐图状态追踪** — 缩略图条显示每张图片的独立状态徽章（排队中 / 处理中 / 完成 / 错误）
+- **逐图状态追踪** — 缩略图条显示每张图片的独立状态徽章（排队中 / 处理中 / 完成 / 错误），支持单页删除
+- **Markdown 渲染** — 识别结果支持 GFM Markdown 渲染（表格、代码块、列表等）
 - **LaTeX 公式渲染** — 识别结果中的数学公式通过 KaTeX 实时渲染
 - **客户端图片压缩** — Web Worker + OffscreenCanvas 后台压缩，不阻塞主线程；不支持时自动回退
 - **批量持久化写入** — OCR 状态写入经缓冲后批量落库，减少高频 IndexedDB 压力
@@ -67,6 +68,7 @@ src/
 |   +-- ImagePreview.tsx         # 图片 / PDF 预览与导航
 |   +-- ImageModal.tsx           # 图片大图弹窗
 |   +-- ResultPanel.tsx          # 识别结果 + 复制/导出下拉菜单
+|   +-- MarkdownResult.tsx       # Markdown 渲染器
 |   +-- SettingsDialog.tsx       # API 配置弹窗
 |   +-- PageThumbnail.tsx        # 带状态徽章的缩略图
 |   +-- HealthIndicator.tsx      # 顶栏健康状态指示器
@@ -80,6 +82,7 @@ src/
 |   +-- compressImage.ts         # 图片压缩
 |   +-- compressWorker.ts        # Web Worker 压缩脚本
 |   +-- createThumbnail.ts       # 缩略图生成
+|   +-- webpSupport.ts           # WebP 编码支持探测
 |   +-- fetchImageFromUrl.ts     # URL 图片加载
 |   +-- clientId.ts              # 持久化客户端 UUID
 |   +-- exifFix.ts               # EXIF 方向自动修正
@@ -145,6 +148,7 @@ npm run test:e2e:ui
 | API 密钥 | 空 | 必填，对应 API 提供商的密钥 |
 | 模型名称 | `gpt-5.4` | OpenAI / Gemini 路径使用；DeepSeek-OCR 不需要 |
 | OCR 语言 | `auto` | 仅 DeepSeek-OCR 路径可选 |
+| 最大输出 Token | `8192` | OpenAI / Gemini 路径使用；DeepSeek-OCR 不适用 |
 | Prompt | 内置 OCR 转录提示词 | 支持自定义 |
 
 ### 支持的 API 提供商
@@ -216,8 +220,8 @@ IndexedDB (Dexie.js) <--- pagePersistence（批量持久化缓冲）
 
 - **并发控制**：任务队列默认最大并发数为 3，遇到限流时会自动退避
 - **图片压缩**：OpenAI / Gemini 路径下，超过 2048px 分辨率或 1MB 时自动压缩后再上传；DeepSeek-OCR 路径直传原始文件
-- **PDF 行为**：OpenAI / Gemini 路径会拆页后逐页识别；DeepSeek-OCR 路径会直接上传整份 PDF 文件
-- **代码分割**：PDF 服务、导出服务、DOCX 生成器均为懒加载，首次使用时才下载
+- **PDF 行为**：OpenAI / Gemini 路径会拆页后逐页识别（页面以 JPEG 渲染存储，降低本地占用）；DeepSeek-OCR 路径会直接上传整份 PDF 文件
+- **代码分割**：PDF 服务、导出服务、DOCX 生成器、Markdown / KaTeX 渲染层均为懒加载，首次使用时才下载
 - **URL 协议**：仅支持 `https:` / `http:` / `data:` 协议，不支持本地 `file:` 路径
 - **跨域限制**：通过 URL 加载图片受浏览器 CORS 策略约束；若目标服务器未开放跨域，建议直接上传文件
 
