@@ -27,7 +27,7 @@ export interface PdfCompleteEvent {
   pageIds: string[];
 }
 
-export type OcrEventMap = Record<string, unknown> & {
+export type OcrEventMap = {
   'ocr:queued': { imageId: string };
   'ocr:start': { imageId: string };
   'ocr:progress': { imageId: string; text: string };

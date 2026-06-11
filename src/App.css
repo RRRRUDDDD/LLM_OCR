@@ -20,6 +20,8 @@
 
   --md-warning-container: #FFDF9E;
   --md-on-warning-container: #271900;
+  --md-warning: #F0A000;
+  --md-success: #18A058;
 
   --md-surface: #FFFBFE;
   --md-surface-dim: #DED8E1;
@@ -96,6 +98,8 @@
 
   --md-warning-container: #5B4300;
   --md-on-warning-container: #FFDF9E;
+  --md-warning: #FFC34D;
+  --md-success: #4FC584;
 
   --md-background: #1C1B1F;
   --md-surface: #1C1B1F;

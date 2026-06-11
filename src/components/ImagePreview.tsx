@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ImagePreviewProps {
   imageSrc: string;
@@ -29,6 +30,7 @@ export default memo(function ImagePreview({
   onClick,
   onClear,
 }: ImagePreviewProps) {
+  const { t } = useTranslation();
   // 图片切换时的淡入淡出过渡
   const [fadeClass, setFadeClass] = useState('');
   const prevIndexRef = useRef(currentIndex);
@@ -51,15 +53,15 @@ export default memo(function ImagePreview({
   return (
     <div className="image-preview-wrapper">
       <div className="image-navigation">
-        <button onClick={onPrev} disabled={!canGoPrev} className="md-icon-button" aria-label="上一张">
+        <button onClick={onPrev} disabled={!canGoPrev} className="md-icon-button" aria-label={t('preview.prev')}>
           <span className="material-icons-round">chevron_left</span>
         </button>
         <span className="image-counter">{currentIndex + 1} / {totalImages}</span>
-        <button onClick={onNext} disabled={!canGoNext} className="md-icon-button" aria-label="下一张">
+        <button onClick={onNext} disabled={!canGoNext} className="md-icon-button" aria-label={t('preview.next')}>
           <span className="material-icons-round">chevron_right</span>
         </button>
         {onClear && (
-          <button onClick={onClear} className="md-icon-button" aria-label="清除所有图片" title="清除所有">
+          <button onClick={onClear} className="md-icon-button" aria-label={t('preview.clearAll')} title={t('preview.clearAll')}>
             <span className="material-icons-round">delete_sweep</span>
           </button>
         )}
@@ -73,12 +75,12 @@ export default memo(function ImagePreview({
           if (!hasPreview) return;
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
         }}
-        aria-label={hasPreview ? '点击放大查看图片' : '当前文件无图片预览'}
+        aria-label={hasPreview ? t('preview.clickToZoom') : t('preview.noPreview')}
       >
         {hasPreview ? (
           <img
             src={imageSrc}
-            alt={`第 ${currentIndex + 1} 张图片预览`}
+            alt={t('preview.imageAlt', { index: currentIndex + 1 })}
             className={fadeClass}
             onTransitionEnd={() => setFadeClass('')}
           />
@@ -88,12 +90,12 @@ export default memo(function ImagePreview({
               {isPdf ? 'picture_as_pdf' : 'image_not_supported'}
             </span>
             <span className="image-preview__placeholder-text">
-              {fileName || (isPdf ? 'PDF' : 'Preview unavailable')}
+              {fileName || (isPdf ? 'PDF' : t('preview.noPreview'))}
             </span>
           </div>
         )}
         {isLoading && (
-          <div className="loading-overlay" role="status" aria-label="图片识别中">
+          <div className="loading-overlay" role="status" aria-label={t('result.recognizing')}>
             <div className="md-circular-progress" aria-hidden="true"></div>
           </div>
         )}

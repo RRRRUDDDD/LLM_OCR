@@ -1,4 +1,5 @@
 import detectWebPSupport from './webpSupport';
+import { decodeImage } from './canvas';
 
 const DEFAULT_THUMBNAIL_SIZE = 160;
 const DEFAULT_QUALITY = 0.8;
@@ -8,20 +9,15 @@ export default async function createThumbnail(
   maxSize = DEFAULT_THUMBNAIL_SIZE,
   quality = DEFAULT_QUALITY,
 ): Promise<string> {
-  const url = URL.createObjectURL(source);
+  const { image, width: sourceWidth, height: sourceHeight, close } = await decodeImage(source);
 
   try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('Failed to load image for thumbnail generation'));
-      img.src = url;
-    });
+    const scale = Math.min(1, maxSize / Math.max(sourceWidth, sourceHeight));
+    const width = Math.max(1, Math.round(sourceWidth * scale));
+    const height = Math.max(1, Math.round(sourceHeight * scale));
 
-    const scale = Math.min(1, maxSize / Math.max(image.naturalWidth, image.naturalHeight));
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
-
+    // DOM canvas on purpose: the thumbnail is persisted as a data URL and
+    // OffscreenCanvas has no toDataURL.
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -36,6 +32,6 @@ export default async function createThumbnail(
 
     return canvas.toDataURL(detectWebPSupport() ? 'image/webp' : 'image/jpeg', quality);
   } finally {
-    URL.revokeObjectURL(url);
+    close();
   }
 }

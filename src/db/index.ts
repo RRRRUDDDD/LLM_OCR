@@ -188,6 +188,7 @@ class OcrDatabase extends Dexie {
       await this.imageBlobs.clear();
       await this.figures.clear();
     });
+    this.orderCounter = 0;
   }
 
   // ── Figures ──
@@ -262,11 +263,21 @@ class OcrDatabase extends Dexie {
 
   // ── Order Counter ──
 
+  // Cached after the first read: bulk additions (multi-page PDFs) would
+  // otherwise issue one indexed query per page.
+  private orderCounter: number | null = null;
+  private orderCounterInit: Promise<void> | null = null;
+
   async getNextOrder(): Promise<number> {
-    // Use max(order) + 1 instead of count(): after deletions, count() can
-    // collide with an existing order and make orderBy('order') unstable.
-    const last = await this.images.orderBy('order').last();
-    return typeof last?.order === 'number' ? last.order + 1 : 0;
+    if (this.orderCounter === null) {
+      // Use max(order) + 1 instead of count(): after deletions, count() can
+      // collide with an existing order and make orderBy('order') unstable.
+      this.orderCounterInit ??= this.images.orderBy('order').last().then((last) => {
+        this.orderCounter ??= typeof last?.order === 'number' ? last.order + 1 : 0;
+      });
+      await this.orderCounterInit;
+    }
+    return this.orderCounter!++;
   }
 }
 

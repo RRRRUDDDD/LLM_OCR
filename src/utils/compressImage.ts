@@ -1,5 +1,7 @@
 import type { CompressOptions, CompressResult, WorkerCompressResponse } from '../types/compress';
 import detectWebPSupport from './webpSupport';
+import { throwIfAborted } from './abort';
+import { encodeCanvas } from './canvas';
 
 function isWorkerSupported(): boolean {
   return typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
@@ -21,12 +23,6 @@ interface WorkerSlot {
   worker: Worker;
   currentJob: PendingWorkerJob | null;
   abortHandler: (() => void) | null;
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
 }
 
 class CompressionWorkerPool {
@@ -210,31 +206,6 @@ function getPreferredMimeTypes(): string[] {
   return detectWebPSupport() ? ['image/webp', 'image/jpeg'] : ['image/jpeg'];
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error('Failed to compress image'));
-      },
-      type,
-      quality,
-    );
-  });
-}
-
-async function createCompressedBlob(canvas: HTMLCanvasElement, quality: number): Promise<{ blob: Blob; mimeType: string }> {
-  for (const mimeType of getPreferredMimeTypes()) {
-    const blob = await canvasToBlob(canvas, mimeType, quality);
-    if (blob.type === mimeType) {
-      return { blob, mimeType };
-    }
-  }
-
-  const fallbackBlob = await canvasToBlob(canvas, 'image/jpeg', quality);
-  return { blob: fallbackBlob, mimeType: fallbackBlob.type || 'image/jpeg' };
-}
-
 function compressOnMainThread(file: File, opts: CompressOptions = {}, signal?: AbortSignal): Promise<CompressResult> {
   const { maxDim = 2048, quality = 0.85, threshold = 1_048_576 } = opts;
 
@@ -307,7 +278,7 @@ function compressOnMainThread(file: File, opts: CompressOptions = {}, signal?: A
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
 
-      void createCompressedBlob(canvas, quality)
+      void encodeCanvas(canvas, getPreferredMimeTypes(), quality)
         .then(({ blob, mimeType }) => {
           if (settled) return;
           const reader = new FileReader();

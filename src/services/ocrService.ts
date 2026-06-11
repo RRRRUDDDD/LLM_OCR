@@ -4,6 +4,7 @@ import { healthChecker } from './healthCheck';
 import { processFigureMarkers } from './figureExtraction';
 import { ocrLogger } from '../utils/logger';
 import { getClientId } from '../utils/clientId';
+import { delayWithSignal } from '../utils/abort';
 import compressImage from '../utils/compressImage';
 import type { ApiConfig, OcrRequestPayload } from '../types/api';
 
@@ -20,18 +21,6 @@ interface OcrProgressEmitter {
   push: (text: string) => void;
   flush: () => void;
   cancel: () => void;
-}
-
-function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise<void>((resolve) => {
-    if (signal?.aborted) { resolve(); return; }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => { clearTimeout(timer); resolve(); };
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
 }
 
 interface TimeoutSignalHandle {

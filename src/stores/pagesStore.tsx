@@ -150,10 +150,14 @@ function pagesReducer(state: PagesState, action: PagesAction): PagesState {
         updatedAt: new Date(),
       };
 
+      // Status counts only move when a status changes — skip the O(n) recount
+      // on pure text updates (streaming progress fires every 50 ms).
+      const statusChanged = action.updates.status !== undefined && action.updates.status !== currentPage.status;
+
       return {
         ...state,
         pages: nextPages,
-        ...getStatusCounts(nextPages),
+        ...(statusChanged ? getStatusCounts(nextPages) : null),
       };
     }
 

@@ -2,6 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { ocrEvents } from '../events/ocrEvents';
 import { generateId } from '../db/index';
 import { ocrLogger } from '../utils/logger';
+import { canvasToBlob, createCanvas, get2DContext } from '../utils/canvas';
 
 interface RenderablePdfPage {
   getViewport: (params: { scale: number }) => { width: number; height: number };
@@ -75,38 +76,15 @@ export function isPdf(file: File): boolean {
   );
 }
 
-async function renderPageToBlob(page: RenderablePdfPage, scale = DEFAULT_SCALE): Promise<{ blob: Blob; width: number; height: number }> {
+async function renderPageToBlob(page: RenderablePdfPage, scale = DEFAULT_SCALE): Promise<RenderedPdfPage> {
   const viewport = page.getViewport({ scale });
-  const canvas = new OffscreenCanvas(viewport.width, viewport.height);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas context is unavailable');
+  const canvas = createCanvas(viewport.width, viewport.height);
+  const ctx = get2DContext(canvas);
 
   await page.render({ canvasContext: ctx, viewport }).promise;
 
-  const blob = await canvas.convertToBlob({ type: PAGE_IMAGE_TYPE, quality: PAGE_IMAGE_QUALITY });
+  const blob = await canvasToBlob(canvas, PAGE_IMAGE_TYPE, PAGE_IMAGE_QUALITY);
   return { blob, width: viewport.width, height: viewport.height };
-}
-
-async function renderPageToBlobFallback(page: RenderablePdfPage, scale = DEFAULT_SCALE): Promise<{ blob: Blob; width: number; height: number }> {
-  const viewport = page.getViewport({ scale });
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas context is unavailable');
-
-  await page.render({ canvasContext: ctx, viewport }).promise;
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve({ blob, width: viewport.width, height: viewport.height });
-        else reject(new Error('Canvas toBlob returned null'));
-      },
-      PAGE_IMAGE_TYPE,
-      PAGE_IMAGE_QUALITY
-    );
-  });
 }
 
 async function loadPdfDocument(file: File, signal?: AbortSignal): Promise<RenderablePdfDocument | null> {
@@ -132,9 +110,6 @@ export async function extractPdfPages(file: File, options: ExtractPdfOptions = {
     ocrEvents.emit('pdf:start', { fileName, totalPages: targets.length });
     ocrLogger.info(`[PDF] Processing "${fileName}": ${targets.length}/${totalPages} pages`);
 
-    const supportsOffscreen = typeof OffscreenCanvas !== 'undefined';
-    const renderFn = supportsOffscreen ? renderPageToBlob : renderPageToBlobFallback;
-
     const pageIds: string[] = [];
 
     for (let i = 0; i < targets.length; i++) {
@@ -143,7 +118,7 @@ export async function extractPdfPages(file: File, options: ExtractPdfOptions = {
 
       const page = await pdf.getPage(pageNumber) as unknown as RenderablePdfPage;
       try {
-        const { blob, width, height } = await renderFn(page, scale);
+        const { blob, width, height } = await renderPageToBlob(page, scale);
         const pageId = generateId('pdf');
         const extractedPage: ExtractedPdfPage = {
           id: pageId,
@@ -198,9 +173,6 @@ export async function createPdfRenderSource(file: File): Promise<PdfRenderSource
   const pdf = await loadPdfDocument(file);
   if (!pdf) throw new Error('PDF document failed to load');
 
-  const supportsOffscreen = typeof OffscreenCanvas !== 'undefined';
-  const renderFn = supportsOffscreen ? renderPageToBlob : renderPageToBlobFallback;
-
   let chain: Promise<unknown> = Promise.resolve();
 
   const renderPage = (pageNumber: number, targetWidth: number): Promise<RenderedPdfPage> => {
@@ -209,7 +181,7 @@ export async function createPdfRenderSource(file: File): Promise<PdfRenderSource
       try {
         const baseViewport = page.getViewport({ scale: 1 });
         const scale = targetWidth / Math.max(1, baseViewport.width);
-        return await renderFn(page, scale);
+        return await renderPageToBlob(page, scale);
       } finally {
         page.cleanup?.();
       }

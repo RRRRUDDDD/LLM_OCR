@@ -22,6 +22,9 @@ const THUMBNAIL_TARGET_WIDTH = 160;
 const PREVIEW_TARGET_WIDTH = 1100;
 // Keep a handful of rendered previews around so flipping back is instant.
 const PREVIEW_CACHE_SIZE = 8;
+// Flush streamed thumbnails into state in batches — one setState per page
+// would re-render the whole grid hundreds of times on large PDFs.
+const THUMBNAIL_FLUSH_BATCH = 12;
 
 function isEditableTarget(target: EventTarget | null): boolean {
   const tag = target instanceof HTMLElement ? target.tagName : '';
@@ -102,18 +105,35 @@ export default function PdfPageSelectDialog({ file, onConfirm, onCancel }: PdfPa
         sourceRef.current = source;
         setTotalPages(source.totalPages);
 
+        let buffer: ThumbnailItem[] = [];
+        const flushBuffer = () => {
+          if (buffer.length === 0) return;
+          const items = buffer;
+          buffer = [];
+          setThumbnails((prev) => [...prev, ...items]);
+          setSelected((prev) => {
+            const next = new Set(prev);
+            for (const item of items) next.add(item.pageNumber);
+            return next;
+          });
+        };
+
         for (let pageNumber = 1; pageNumber <= source.totalPages; pageNumber++) {
           if (cancelled) break;
           const { blob } = await source.renderPage(pageNumber, THUMBNAIL_TARGET_WIDTH);
           if (cancelled) break;
           const url = URL.createObjectURL(blob);
           urls.push(url);
-          setThumbnails((prev) => [...prev, { pageNumber, url }]);
-          setSelected((prev) => new Set(prev).add(pageNumber));
+          buffer.push({ pageNumber, url });
+          if (buffer.length >= THUMBNAIL_FLUSH_BATCH) flushBuffer();
           // The preview pane is always visible — show the first page as soon
           // as the document is readable.
-          if (pageNumber === 1) openPreview(1);
+          if (pageNumber === 1) {
+            flushBuffer();
+            openPreview(1);
+          }
         }
+        flushBuffer();
       } catch (error) {
         uiLogger.error('PDF thumbnail extraction failed:', error);
       } finally {

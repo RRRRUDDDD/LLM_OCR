@@ -1,5 +1,6 @@
 import PQueue from 'p-queue';
 import { ocrEvents } from '../events/ocrEvents';
+import { delayWithSignal } from '../utils/abort';
 import type { QueueStats } from '../types/queue';
 
 type QueueTask = (signal: AbortSignal) => Promise<void>;
@@ -165,26 +166,12 @@ class QueueManager {
     return this.activeControllers.has(imageId) || this.pendingControllers.has(imageId);
   }
 
-  private delay(ms: number, signal: AbortSignal): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const timer = setTimeout(() => {
-        signal.removeEventListener('abort', onAbort);
-        resolve();
-      }, ms);
-      const onAbort = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
-  }
-
   private async waitForHealthy(signal: AbortSignal): Promise<void> {
     if (!this.healthChecker) return;
 
     const checkInterval = 2000;
     while (!this.healthChecker() && !signal.aborted) {
-      await this.delay(checkInterval, signal);
+      await delayWithSignal(checkInterval, signal);
     }
   }
 
@@ -205,7 +192,7 @@ class QueueManager {
         return;
       }
 
-      await this.delay(this.startTimestamps[0] + RATE_WINDOW_MS - now, signal);
+      await delayWithSignal(this.startTimestamps[0] + RATE_WINDOW_MS - now, signal);
     }
   }
 

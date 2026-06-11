@@ -1,5 +1,10 @@
 const ALLOWED_PROTOCOLS = new Set(['https:', 'http:', 'data:']);
 
+// Error names consumers can branch on (instead of fragile message matching).
+function namedError(name: 'TimeoutError' | 'NetworkError' | 'InvalidUrlError', message: string): Error {
+  return Object.assign(new Error(message), { name });
+}
+
 export default async function fetchImageFromUrl(url: string): Promise<File> {
   let parsedProtocol;
   if (url.startsWith('data:')) {
@@ -8,11 +13,11 @@ export default async function fetchImageFromUrl(url: string): Promise<File> {
     try {
       parsedProtocol = new URL(url).protocol;
     } catch {
-      throw new Error('无效的图片链接，请检查 URL 格式。');
+      throw namedError('InvalidUrlError', '无效的图片链接，请检查 URL 格式。');
     }
   }
   if (!ALLOWED_PROTOCOLS.has(parsedProtocol)) {
-    throw new Error(`不支持的协议 "${parsedProtocol}"，仅允许 https / http 链接。`);
+    throw namedError('InvalidUrlError', `不支持的协议 "${parsedProtocol}"，仅允许 https / http 链接。`);
   }
 
   let imageBlob;
@@ -31,29 +36,16 @@ export default async function fetchImageFromUrl(url: string): Promise<File> {
         throw new Error('Empty response');
       }
     } catch (err: unknown) {
-      clearTimeout(timeoutId);
       if (err instanceof DOMException && err.name === 'AbortError') {
-        throw new Error('请求超时，请检查网络连接。可尝试右键另存为后上传。');
+        throw namedError('TimeoutError', '请求超时，请检查网络连接。可尝试右键另存为后上传。');
       }
       if (err instanceof TypeError) {
-        throw Object.assign(
-          new Error('CORS 或网络错误，该图片可能有访问限制。请右键另存为后上传。'),
-          { name: 'NetworkError' },
-        );
+        throw namedError('NetworkError', 'CORS 或网络错误，该图片可能有访问限制。请右键另存为后上传。');
       }
       throw new Error('无法加载图片，请检查链接是否正确。可尝试右键另存为后上传。');
     } finally {
       clearTimeout(timeoutId);
     }
-
-    // --- 如需启用第三方 CORS 代理回退，取消以下注释 ---
-    // 警告：用户的图片 URL 及内容将经过 corsproxy.io 传输
-    // const proxyServices = [
-    //   null,
-    //   (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    // ];
-    // let lastError;
-    // for (const getProxyUrl of proxyServices) { ... }
   }
 
   if (!imageBlob.type.startsWith('image/')) {

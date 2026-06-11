@@ -1,19 +1,14 @@
 /// <reference lib="webworker" />
 
+import { encodeCanvas } from './canvas';
 import type { CompressOptions, CompressResult, WorkerCompressRequest } from '../types/compress';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-async function createCompressedBlob(canvas: OffscreenCanvas, quality: number): Promise<{ blob: Blob; mimeType: string }> {
-  for (const mimeType of ['image/webp', 'image/jpeg']) {
-    const blob = await canvas.convertToBlob({ type: mimeType, quality });
-    if (blob.type === mimeType) {
-      return { blob, mimeType };
-    }
-  }
-
-  const fallbackBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
-  return { blob: fallbackBlob, mimeType: fallbackBlob.type || 'image/jpeg' };
+/** Blob → base64 via FileReaderSync (worker-only API, no chunked string building). */
+function blobToBase64(blob: Blob): string {
+  const dataUrl = new FileReaderSync().readAsDataURL(blob);
+  return dataUrl.slice(dataUrl.indexOf(',') + 1);
 }
 
 async function compress(file: File, opts: CompressOptions = {}): Promise<CompressResult> {
@@ -28,9 +23,7 @@ async function compress(file: File, opts: CompressOptions = {}): Promise<Compres
   if (!needsResize && !needsCompress) {
     bitmap.close();
     // 直接读取原始文件
-    const ab = await file.arrayBuffer();
-    const base64 = arrayBufferToBase64(ab);
-    return { base64, mimeType: file.type };
+    return { base64: blobToBase64(file), mimeType: file.type };
   }
 
   let width = origW;
@@ -53,22 +46,8 @@ async function compress(file: File, opts: CompressOptions = {}): Promise<Compres
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
-  const { blob, mimeType } = await createCompressedBlob(canvas, quality);
-
-  const ab = await blob.arrayBuffer();
-  const base64 = arrayBufferToBase64(ab);
-  return { base64, mimeType };
-}
-
-/** ArrayBuffer → base64 字符串（分块转换，避免大数组一次性展开导致调用栈溢出） */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
+  const { blob, mimeType } = await encodeCanvas(canvas, ['image/webp', 'image/jpeg'], quality);
+  return { base64: blobToBase64(blob), mimeType };
 }
 
 self.onmessage = async (e: MessageEvent<WorkerCompressRequest>) => {

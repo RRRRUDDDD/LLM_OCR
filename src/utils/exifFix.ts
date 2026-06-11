@@ -1,8 +1,4 @@
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
-}
+import { throwIfAborted } from './abort';
 
 export async function readExifOrientation(blob: Blob, signal?: AbortSignal): Promise<number> {
   try {
@@ -19,15 +15,18 @@ export async function readExifOrientation(blob: Blob, signal?: AbortSignal): Pro
       const marker = view.getUint16(offset);
       offset += 2;
 
-      if (marker === 0xffe1) {
-        // APP1 (EXIF)
-        const length = view.getUint16(offset);
-        offset += 2;
+      // SOS — compressed image data starts, no more metadata segments
+      if (marker === 0xffda) break;
 
-        // Check "Exif\0\0" header
-        const exifHeader = view.getUint32(offset);
-        if (exifHeader !== 0x45786966) return 1; // Not EXIF
-        offset += 6; // Skip "Exif\0\0"
+      if (marker === 0xffe1) {
+        // APP1 — may be EXIF, but XMP also lives here; skip non-EXIF
+        // segments and keep scanning instead of giving up.
+        const length = view.getUint16(offset);
+        if (view.getUint32(offset + 2) !== 0x45786966) {
+          offset += length;
+          continue;
+        }
+        offset += 2 + 6; // skip length + "Exif\0\0"
 
         const tiffStart = offset;
         const bigEndian = view.getUint16(tiffStart) === 0x4d4d;

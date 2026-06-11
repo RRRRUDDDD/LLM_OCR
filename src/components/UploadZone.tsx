@@ -13,6 +13,9 @@ interface UploadZoneProps {
   onPastedUrlConsumed: () => void;
 }
 
+// Match image URLs even with query strings or hash fragments.
+const IMAGE_URL_RE = /\.(jpe?g|png|gif|webp)([?#]|$)/i;
+
 export default function UploadZone({
   hasImages,
   onFilesSelected,
@@ -101,7 +104,7 @@ export default function UploadZone({
     const filePromises = items.map(async (item) => {
       if (item.kind === 'string') {
         const url = await new Promise<string>((resolve) => item.getAsString(resolve));
-        if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || url.startsWith('data:image/')) {
+        if (IMAGE_URL_RE.test(url) || url.startsWith('data:image/')) {
           try {
             return await fetchImageFromUrl(url);
           } catch {
@@ -135,10 +138,10 @@ export default function UploadZone({
       setImageUrl('');
     } catch (error: unknown) {
       uiLogger.error('Error loading image:', error);
+      const errorName = error instanceof Error ? error.name : '';
       let message = t('error.loadImageFailed') + '，';
-      if (error instanceof DOMException && error.name === 'AbortError') message += t('error.timeout');
-      else if (error instanceof Error && error.message.includes('CORS')) message += t('error.cors');
-      else if (error instanceof Error && error.message.includes('network')) message += t('error.network');
+      if (errorName === 'TimeoutError') message += t('error.timeout');
+      else if (errorName === 'NetworkError') message += t('error.cors');
       else message += t('error.generic');
       message += ' ' + t('error.saveAsHint');
       showSnack(message, 'error');

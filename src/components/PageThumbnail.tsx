@@ -3,11 +3,11 @@ import { PAGE_STATUS } from '../stores/pagesStore';
 import type { Page, PageStatus } from '../types/page';
 
 const STATUS_CONFIG = {
-  [PAGE_STATUS.IDLE]:       { icon: 'image',          color: '#888',    label: 'Ready' },
-  [PAGE_STATUS.QUEUED]:     { icon: 'hourglass_empty', color: '#f0a000', label: 'Queued' },
-  [PAGE_STATUS.PROCESSING]: { icon: 'sync',            color: '#1976d2', label: 'Processing', spin: true },
-  [PAGE_STATUS.DONE]:       { icon: 'check_circle',    color: '#18a058', label: 'Done' },
-  [PAGE_STATUS.ERROR]:      { icon: 'error',           color: '#d32f2f', label: 'Error' },
+  [PAGE_STATUS.IDLE]:       { icon: 'image',           color: 'var(--md-on-surface-variant, #888)', label: 'Ready' },
+  [PAGE_STATUS.QUEUED]:     { icon: 'hourglass_empty', color: 'var(--md-warning, #f0a000)',         label: 'Queued' },
+  [PAGE_STATUS.PROCESSING]: { icon: 'sync',            color: 'var(--md-primary, #1976d2)',         label: 'Processing', spin: true },
+  [PAGE_STATUS.DONE]:       { icon: 'check_circle',    color: 'var(--md-success, #18a058)',         label: 'Done' },
+  [PAGE_STATUS.ERROR]:      { icon: 'error',           color: 'var(--md-error, #d32f2f)',           label: 'Error' },
 } as const satisfies Record<PageStatus, { icon: string; color: string; label: string; spin?: boolean }>;
 
 interface StatusBadgeProps {
